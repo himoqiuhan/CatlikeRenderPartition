@@ -1,0 +1,51 @@
+using System;
+using UnityEngine;
+
+[Serializable]
+public class ShadowSettings
+{
+    [Min(0.001f)] public float maxDistance = 100;//设置阴影的最大距离
+    //因为在计算shadow fading的时候，maxDistance会作为分母，需要非零
+    [Range(0.001f, 1f)] public float distanceFade = 0.1f;//shadow fading的减淡范围
+    
+    public enum MapSize
+    {
+        _256 = 256, _512 = 512, _1024 = 1024, _2048 = 2048, _4096 = 4096, _8192 = 8192
+    }
+    
+    public enum FilterMode
+    {
+        PCF2x2, PCF3x3, PCF5x5, PCF7x7
+    }
+
+    [System.Serializable]
+    public struct Directional
+    {
+        public MapSize atlasSize;
+        public FilterMode filter;
+        [Range(1, 4)] public int cascadeCount;
+        [Range(0f, 1f)] public float cascadeRatio1, cascadeRatio2, cascadeRatio3;
+        [Range(0.001f, 1f)] public float cascadeFade;//不同于对阴影的减淡，这个是对cascade阴影的减淡，用于优化cascade的culling sphere边缘阴影减淡的效果
+        public Vector3 CascadeRatios => new Vector3(cascadeRatio1, cascadeRatio2, cascadeRatio3);
+        
+        public enum CascadeBlendMode
+        {
+            Hard, Soft, Dither
+        }
+
+        public CascadeBlendMode cascadeBlend;
+    }
+
+    public Directional directional = new Directional
+    {
+        atlasSize = MapSize._1024,
+        filter = FilterMode.PCF2x2,
+        cascadeCount = 4,
+        cascadeRatio1 = 0.1f,
+        cascadeRatio2 = 0.25f,
+        cascadeRatio3 = 0.5f,
+        cascadeFade = 0.1f,
+        cascadeBlend = Directional.CascadeBlendMode.Hard
+    };
+    
+}

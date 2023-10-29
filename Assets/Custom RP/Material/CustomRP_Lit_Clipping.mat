@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: CustomRP_Lit_Clipping
+  m_Shader: {fileID: 4800000, guid: b7496f05c911a0840a47026868ff896d, type: 3}
+  m_ValidKeywords:
+  - _CLIPPING
+  - _RECEIVE_SHADOWS
+  - _SHADOWS_DITHER
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 1
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: 2450
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _MainTex:
+        m_Texture: {fileID: 2800000, guid: 32db5f9bc1af50c458c7f848432fbab4, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _Clipping: 1
+    - _Cutoff: 0.5
+    - _DstBlend: 0
+    - _Metallic: 0.643
+    - _PreMulAlpha: 0
+    - _ReceiveShadows: 1
+    - _Shadows: 2
+    - _Smoothness: 0.471
+    - _SrcBlend: 1
+    - _ZWrite: 1
+    m_Colors:
+    - _BaseColor: {r: 0.9622642, g: 0.9622642, b: 0.9622642, a: 1}
+  m_BuildTextureStacks: []
