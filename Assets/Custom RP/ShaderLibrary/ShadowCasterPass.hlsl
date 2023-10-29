@@ -4,13 +4,13 @@
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/UnityInstancing.hlsl"
 
-TEXTURE2D(_MainTex);
-SAMPLER(sampler_MainTex);
-UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
-UNITY_DEFINE_INSTANCED_PROP(float4, _MainTex_ST)
-UNITY_DEFINE_INSTANCED_PROP(half4, _BaseColor)
-UNITY_DEFINE_INSTANCED_PROP(float, _Cutoff)
-UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
+// TEXTURE2D(_MainTex);
+// SAMPLER(sampler_MainTex);
+// UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
+// UNITY_DEFINE_INSTANCED_PROP(float4, _MainTex_ST)
+// UNITY_DEFINE_INSTANCED_PROP(half4, _BaseColor)
+// UNITY_DEFINE_INSTANCED_PROP(float, _Cutoff)
+// UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
 
 struct Attributes
 {
@@ -44,18 +44,21 @@ Varyings ShadowCasterPassVertexProgram(Attributes input)
     //如果深度没有反转（近0远1）
     output.positionCS.z = max(output.positionCS.z, output.positionCS.w * UNITY_NEAR_CLIP_VALUE);
     #endif
-    float4 mainTexST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _MainTex_ST);
-    output.uv = input.uv * mainTexST.xy + mainTexST.zw;
+    // float4 mainTexST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _MainTex_ST);
+    // output.uv = input.uv * mainTexST.xy + mainTexST.zw;
+    output.uv = TransformBaseUV(input.uv);
     return output;
 }
 
 void ShadowCasterPassFragmentProgram(Varyings i)
 {
-    half4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
-    half4 mainTexColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
-    half4 base = baseColor * mainTexColor;
+    // half4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
+    // half4 mainTexColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
+    // half4 base = baseColor * mainTexColor;
+    float4 base = GetBase(i.uv);
     #if defined(_SHADOWS_CLIP)
-        clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
+        // clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
+        clip(base.a - GetCutOff(i.uv));
     #elif defined(_SHADOWS_DITHER)
         float dither = InterleavedGradientNoise(i.positionCS.xy, 0);
         clip(base.a - dither);

@@ -1,5 +1,10 @@
 Shader "CustomRP/Lit"
 {
+    HLSLINCLUDE
+    #include "../ShaderLibrary/Common.hlsl"
+    #include "../ShaderLibrary/LitInput.hlsl"
+    ENDHLSL
+
     Properties
     {
         _MainTex("Main Texture", 2D) = "white"{}

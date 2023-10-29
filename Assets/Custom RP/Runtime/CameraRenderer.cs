@@ -109,14 +109,18 @@ public partial class CameraRenderer
     void DrawVisibleGeometry(bool useDynamicBatching, bool useGPUInstancing)
     {
         //SortingSettings描述渲染时对物体进行排序的方法
-        //通常通过设置类成员criteria来进行排序的设置，常用的是SortingCriteria.CommonOpaque和SortingCriteria.CommonTransparent，其余见文档 -- https://docs.unity3d.com/ScriptReference/Rendering.SortingCriteria.html
+        //通常通过设置类成员criteria来进行排序的设置，常用的是SortingCriteria.CommonOpaque和SortingCriteria.CommonTransparent，
+        //其余见文档 -- https://docs.unity3d.com/ScriptReference/Rendering.SortingCriteria.html
         var sortingSetings = new SortingSettings(camera) { criteria = SortingCriteria.CommonOpaque };
         //DrawingSettings描述如何对可见的物体排序 (sortingSettings) 、以及使用哪个shader (shaderPassName)
         var drawingSettings = new DrawingSettings(unlitShaderTagId, sortingSetings)
         {
             enableDynamicBatching = useDynamicBatching,
             enableInstancing = useGPUInstancing,
-            perObjectData = PerObjectData.Lightmaps //告诉管线使用lightmap的object，用于获取并传输lightmap的UV到shader中
+            perObjectData = PerObjectData.Lightmaps | //告诉管线使用lightmap,用于获取并传输lightmap的UV到shader中
+                            PerObjectData.LightProbe |  //Light Probe的object
+                            PerObjectData.LightProbeProxyVolume //Light Probe Proxy Volume的object
+                                                                              
         };
         //添加一个新的光照模型LightMode
         drawingSettings.SetShaderPassName(1, litShaderTagId);

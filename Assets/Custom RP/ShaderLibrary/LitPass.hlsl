@@ -5,6 +5,7 @@
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/UnityInstancing.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
 #include "../ShaderLibrary/Common.hlsl"
+#include "../ShaderLibrary/UnityInput.hlsl"
 #include "../ShaderLibrary/Surface.hlsl"
 #include "../ShaderLibrary/Shadows.hlsl"
 #include "../ShaderLibrary/Light.hlsl"
@@ -12,20 +13,15 @@
 #include "../ShaderLibrary/GI.hlsl"
 #include "../ShaderLibrary/Lighting.hlsl"
 
-TEXTURE2D(_MainTex);
-SAMPLER(sampler_MainTex);
-UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
-UNITY_DEFINE_INSTANCED_PROP(float4, _MainTex_ST)
-UNITY_DEFINE_INSTANCED_PROP(half4, _BaseColor)
-UNITY_DEFINE_INSTANCED_PROP(float, _Cutoff)
-UNITY_DEFINE_INSTANCED_PROP(float, _Metallic)
-UNITY_DEFINE_INSTANCED_PROP(float, _Smoothness)
-UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
-
-CBUFFER_START(UnityPerMaterial)
-// float4 unity_LightmapST;
-// float4 unity_DynamicLightmapST; //For SRP batcher compatibility
-CBUFFER_END
+//TEXTURE2D(_MainTex);
+//SAMPLER(sampler_MainTex);
+//UNITY_INSTANCING_BUFFER_START(UnityPerMaterial)
+//UNITY_DEFINE_INSTANCED_PROP(float4, _MainTex_ST)
+//UNITY_DEFINE_INSTANCED_PROP(half4, _BaseColor)
+//UNITY_DEFINE_INSTANCED_PROP(float, _Cutoff)
+//UNITY_DEFINE_INSTANCED_PROP(float, _Metallic)
+//UNITY_DEFINE_INSTANCED_PROP(float, _Smoothness)
+//UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
 
 struct Attributes
 {
@@ -59,16 +55,18 @@ Varyings LitPassVertexProgram(Attributes input)
     VertexNormalInputs vertexNormalInputs = GetVertexNormalInputs(input.normalOS);
     //Only Normal Can Use if just input normalOS
     output.normalWS = vertexNormalInputs.normalWS;
-    float4 mainTexST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _MainTex_ST);
-    output.uv = input.uv * mainTexST.xy + mainTexST.zw;
+    // float4 mainTexST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _MainTex_ST);
+    // output.uv = input.uv * mainTexST.xy + mainTexST.zw;
+    output.uv = TransformBaseUV(input.uv);
     return output;
 }
 
 half4 LitPassFragmentProgram(Varyings i) : SV_Target0
 {
-    half4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
-    half4 mainTexColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
-    half4 base = baseColor * mainTexColor;
+    // half4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
+    // half4 mainTexColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
+    // half4 base = baseColor * mainTexColor;
+    float4 base = GetBase(i.uv);
     // color.rgb = normalize(i.normalWS);
     //在进行线性插值时，每个片元得到的法线并不是等长的
     // color.rgb = abs(length(i.normalWS)-1.0) * 10.0;
@@ -77,7 +75,8 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
 
     //Deal with Clipping
     #if defined(_CLIPPING)
-    clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
+        // clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
+        clip(base.a - GetCutOff(i.uv));
     #endif
 
     //Deal with surface attributes
@@ -88,13 +87,15 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
     surface.depth = -TransformWorldToView(i.positionWS).z;
     surface.color = base.rgb;
     surface.alpha = base.a;
-    surface.metallic = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Metallic);
-    surface.smoothness = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Smoothness);
+    // surface.metallic = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Metallic);
+    surface.metallic = GetMetallic(i.uv);
+    // surface.smoothness = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Smoothness);
+    surface.smoothness = GetSmoothness(i.uv);
     surface.dither = InterleavedGradientNoise(i.positionCS.xy, 0);//使用Core.hlsl中的函数来计算dither扰动采样位置
     //输入的第一个参数是SS的XY position，Fragment Shader中等效于CS的XY position；第二个参数用于控制其动画，不需要动画则直接使用0
 
     //Deal with GI
-    GI gi = GetGI(GI_FRAGMENT_DATA(i));
+    GI gi = GetGI(GI_FRAGMENT_DATA(i), surface);
     // return half4(gi.diffuse,1.0);
     
     float4 color;
