@@ -8,11 +8,15 @@ public class PerObjectMaterialProperties : MonoBehaviour
     private static int cutoffId = Shader.PropertyToID("_Cutoff");
     private static int metallicId = Shader.PropertyToID("_Metallic");
     private static int smoothnessId = Shader.PropertyToID("_Smoothness");
+    private static int emissionColorId = Shader.PropertyToID("_EmissionColor");
 
     [SerializeField] public Color baseColor = Color.white;
     [SerializeField, Range(0f, 1f)] public float cutoff = 0.5f;
     [SerializeField, Range(0f, 1f)] public float metallic = 0.0f;
     [SerializeField, Range(0f, 1f)] public float smoothness = 0.5f;
+
+    [SerializeField, ColorUsage(false, true)]
+    private Color emissionColor = Color.black;
 
     //实现逐对象的材质属性需要通过MaterialPropertyBlock对象来完成，因为这个对象我们只需要一个，且可以复用，所以声明为一个static变量
     private static MaterialPropertyBlock block;
@@ -33,6 +37,7 @@ public class PerObjectMaterialProperties : MonoBehaviour
         block.SetFloat(cutoffId, cutoff);
         block.SetFloat(metallicId, metallic);
         block.SetFloat(smoothnessId, smoothness);
+        block.SetColor(emissionColorId, emissionColor);
         GetComponent<Renderer>().SetPropertyBlock(block);
     }
 }

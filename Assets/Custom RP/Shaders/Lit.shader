@@ -13,6 +13,10 @@ Shader "CustomRP/Lit"
         //PBR
         _Metallic("Metallic", Range(0.0, 1.0)) = 0
         _Smoothness("Smoothness", Range(0.0, 1.0)) = 0.5
+        //Emission
+        [NoScaleOffset]_EmissionMap("Emission", 2D) = "white"{}
+        [HDR]_EmissionColor("Emission", Color) = (0.0, 0.0, 0.0, 0.0)
+        //Settings
         [Toggle(_PREMULTIPLY_ALPHA)] _PreMulAlpha("Premultiply Alpha", Float) = 0
         [Toggle(_CLIPPING)] _Clipping ("Alpha Clipping", Float) = 0
         [Toggle(_RECEIVE_SHADOWS)] _ReceiveShadows("Receive Shadows", Float) = 1

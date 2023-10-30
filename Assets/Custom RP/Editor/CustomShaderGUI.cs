@@ -28,6 +28,11 @@ public class CustomShaderGUI : ShaderGUI
         materials = materialEditor.targets;
         this.properties = properties;
 
+        BakedEmission();//设置是否烘焙自发光，内部调用MaterialEditor.LightmapEmissionProperty
+        //显示在面板上是Global Illumination，但是实际上它只影响烘焙自发光
+        //设置为Baked，向lightmapper标识，为自发光执行一个额外的pass
+        //其中的Realtime选项是被deprecated的
+
         //制作FoldOut折叠显示Preset按钮
         EditorGUILayout.Space();
         showPresets = EditorGUILayout.Foldout(showPresets, "Presets", true);
@@ -39,6 +44,21 @@ public class CustomShaderGUI : ShaderGUI
             FadePreset();
             TransparentPreset();
         }
+    }
+    
+    //设置是否烘焙自发光
+    void BakedEmission()
+    {
+        EditorGUI.BeginChangeCheck();
+        editor.LightmapEmissionProperty();
+        if (EditorGUI.EndChangeCheck())
+        {
+            foreach (Material m in editor.targets)
+            {
+                m.globalIlluminationFlags &= ~MaterialGlobalIlluminationFlags.EmissiveIsBlack;
+            }
+        }
+        
     }
 
     //设置属性值

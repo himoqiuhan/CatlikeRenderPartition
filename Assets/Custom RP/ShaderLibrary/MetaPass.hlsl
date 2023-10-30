@@ -3,10 +3,17 @@
 
 //Meta Pass中需要得到物体表面的漫反射率
 
+#include "../ShaderLibrary/LitInput.hlsl"
 #include "../ShaderLibrary/Surface.hlsl"
 #include "../ShaderLibrary/Shadows.hlsl"
 #include "../ShaderLibrary/Light.hlsl"
 #include "../ShaderLibrary/BRDF.hlsl"
+
+bool4 unity_MetaFragmentControl;//MetaPass可以用来生成不同的数据，通过这个参数来获取flags
+//X:设置是否使用漫反射率
+float unity_OneOverOutputBoost;
+float unity_MaxOutputValue;
+
 
 struct Attributes
 {
@@ -25,7 +32,8 @@ Varyings MetaPassVertexProgram(Attributes input)
 {
     Varyings output;
     input.positionOS.xy = input.lightMapUV * unity_LightmapST.xy + unity_LightmapST.zw;
-    output.positionCS = TransformWorldToHClip(input.positionOS);//只需要知道OS和WS的位置，不需要CS，所以将positionCS设为0
+    input.positionOS.z = input.positionOS.z > 0.0 ? FLT_MIN : 0.0;
+    output.positionCS = TransformWorldToHClip(input.positionOS);//我也没看懂，先写先写
     output.baseUV = TransformBaseUV(input.baseUV);
     return output;
 }
@@ -39,7 +47,19 @@ float4 MetaPassFragmentProgram(Varyings input) : SV_Target
     surface.metallic = GetMetallic(input.baseUV);
     surface.smoothness = GetSmoothness(input.baseUV);
     BRDF brdf = GetBRDF(surface);
-    float meta = 0.0;
+    float4 meta = 0.0;
+    if(unity_MetaFragmentControl.x) // unity_MetaFragmentControl.x控制是否使用漫反射率
+    {
+        meta = float4(brdf.diffuse, 1.0);
+    }
+    else if(unity_MetaFragmentControl.y) // unity_MetaFragmentControl控制是否返回自发光，但是自发光不会自动烘焙
+        //需要到物体那边进行进一步的控制
+    {
+        meta = float4(GetEmission(input.baseUV), 1.0);
+    }
+    meta.rgb += brdf.specular * brdf.roughness * 0.5;//Idea来自高度反光但是粗糙的物体同样会反射出一些间接光
+    meta.rgb = min(PositivePow(meta.rgb, unity_OneOverOutputBoost), unity_MaxOutputValue);
+    //通过unity_OneOverOutputBoost对颜色进行一次增强，PositivePow的底层是确保底数为正的Pow
     return meta;
 }
 

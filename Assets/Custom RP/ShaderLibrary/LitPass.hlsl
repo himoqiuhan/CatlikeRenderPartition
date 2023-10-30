@@ -104,7 +104,7 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
     #else
     BRDF brdf = GetBRDF(surface);
     #endif
-    color.rgb = GetLighting(surface, brdf, gi);
+    color.rgb = GetLighting(surface, brdf, gi) + GetEmission(i.uv);
     color.a = surface.alpha;
 
     return color;

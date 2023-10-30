@@ -9,7 +9,7 @@ float3 InComingLight(Surface surface, Light light);
 float3 GetLighting(Surface surfaceWS, BRDF brdf, GI gi)
 {
     CustomShadowData shadowData = GetShadowData(surfaceWS);
-    float3 color = gi.diffuse;//GI
+    float3 color = gi.diffuse * brdf.diffuse;//GI -- GI颜色乘上物体的漫反射率
     for (int i = 0; i < GetDirectionalLightCount(); i++)
     {
         Light light = GetDirectionalLight(i, surfaceWS, shadowData);
