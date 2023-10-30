@@ -3,6 +3,8 @@
 
 #define MIN_REFLECTIVITY 0.04 //非金属的平均反射率为0.04
 
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
+
 struct BRDF
 {
     float3 diffuse;

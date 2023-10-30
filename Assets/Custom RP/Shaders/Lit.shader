@@ -71,5 +71,23 @@ Shader "CustomRP/Lit"
             #include "../ShaderLibrary/ShadowCasterPass.hlsl"
             ENDHLSL
         }
+        
+        //MetaPass用于烘焙Light Map
+        Pass
+        {
+            Tags
+            {
+                "LightMode" = "Meta"
+            }
+            
+            Cull Off
+            
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex MetaPassVertexProgram
+            #pragma fragment MetaPassFragmentProgram
+            #include "../ShaderLibrary/MetaPass.hlsl"
+            ENDHLSL
+        }
     }
 }

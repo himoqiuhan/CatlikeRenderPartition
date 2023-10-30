@@ -13,6 +13,10 @@ Shader "CustomRP/Unlit"
     CustomEditor "CustomShaderGUI"
     SubShader
     {
+        HLSLINCLUDE
+        #include "../ShaderLibrary/Common.hlsl"
+        #include "../ShaderLibrary/UnlitInput.hlsl"
+        ENDHLSL
         Tags
         {
             "RenderType"="Opaque"
@@ -47,6 +51,24 @@ Shader "CustomRP/Unlit"
             #pragma vertex ShadowCasterPassVertexProgram
             #pragma fragment ShadowCasterPassFragmentProgram
             #include "../ShaderLibrary/ShadowCasterPass.hlsl"
+            ENDHLSL
+        }
+        
+        //MetaPass用于烘焙Light Map
+        Pass
+        {
+            Tags
+            {
+                "LightMode" = "Meta"
+            }
+            
+            Cull Off
+            
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex MetaPassVertexProgram
+            #pragma fragment MetaPassFragmentProgram
+            #include "../ShaderLibrary/MetaPass.hlsl"
             ENDHLSL
         }
     }
