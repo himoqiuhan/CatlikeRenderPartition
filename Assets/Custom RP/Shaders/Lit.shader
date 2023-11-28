@@ -1,10 +1,5 @@
 Shader "CustomRP/Lit"
 {
-    HLSLINCLUDE
-    #include "../ShaderLibrary/Common.hlsl"
-    #include "../ShaderLibrary/LitInput.hlsl"
-    ENDHLSL
-
     Properties
     {
         _MainTex("Main Texture", 2D) = "white"{}
@@ -30,6 +25,11 @@ Shader "CustomRP/Lit"
 
     SubShader
     {
+        HLSLINCLUDE
+        #include "../ShaderLibrary/Common.hlsl"
+        #include "../ShaderLibrary/LitInput.hlsl"
+        ENDHLSL
+        
         Tags
         {
             "RenderType"="Opaque"

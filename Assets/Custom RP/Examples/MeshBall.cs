@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering;
 using Matrix4x4 = UnityEngine.Matrix4x4;
 using Random = UnityEngine.Random;
 
@@ -10,6 +11,7 @@ public class MeshBall : MonoBehaviour
         smoothnessId = Shader.PropertyToID("_Smoothness");
     [SerializeField] public Mesh mesh = default;
     [SerializeField] public Material material = default;
+    [SerializeField] public LightProbeProxyVolume lightProbeVolume = null;
 
     private Matrix4x4[] matrices = new Matrix4x4[1023];
     private Vector4[] baseColors = new Vector4[1023];
@@ -40,7 +42,25 @@ public class MeshBall : MonoBehaviour
             block.SetVectorArray(baseColorId, baseColors);
             block.SetFloatArray(metallicId, metallic);
             block.SetFloatArray(smoothnessId, smoothness);
+
+            if (!lightProbeVolume)
+            {
+                var positions = new Vector3[1023];
+                for (int i = 0; i < matrices.Length; i++)
+                {
+                    positions[i] = matrices[i].GetColumn(3);
+                }
+
+                var lightProbes = new SphericalHarmonicsL2[1023];//Light Probes必须由这个类型的数组提供，并且由以下函数计算
+                LightProbes.CalculateInterpolatedLightAndOcclusionProbes(positions, lightProbes, null);//第三个参数用于控制occlusion，此处设置为null
+                block.CopySHCoefficientArraysFrom(lightProbes);
+            }
         }
-        Graphics.DrawMeshInstanced(mesh, 0, material, matrices, 1023, block);
+        Graphics.DrawMeshInstanced(mesh, 0, material, matrices, 1023, block,
+            ShadowCastingMode.On, true, 0, null, 
+            lightProbeVolume ? LightProbeUsage.UseProxyVolume : LightProbeUsage.CustomProvided, lightProbeVolume
+            //此行前两个参数控制是否CastShadows；第三个控制渲染的Layer；第四个控制渲染到的摄像机，设置为null表示渲染到所有摄像机上；
+            //第五个参数，如果存在lightProbeVolume（使用LPPV），则设置为UseProxyVolume；如果不适用LPPV，则设置为CustomProvided
+            );
     }
 }
