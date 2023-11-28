@@ -45,13 +45,16 @@ Shader "CustomRP/Lit"
             }
             HLSLPROGRAM
             #pragma target 3.5
+            //SRP Settings
+            #pragma multi_compile _ _DIRECTIONAL_PCF3 _DIRECTIONAL_PCF5 _DIRECTIONAL_PCF7
+            #pragma multi_compile _ _CASCADE_BLEND_SOFT _CASCADE_BLEND_DITHER
+            #pragma multi_compile _ _SHADOW_MASK_DISTANCE
             #pragma multi_compile _ LIGHTMAP_ON // Unity会对具有LIGHTMAP_ON关键字的shader变体进行Lightmap的渲染
+            //Material Settings
             #pragma multi_compile_instancing
             #pragma shader_feature _CLIPPING
             #pragma shader_feature _PREMULTIPLY_ALPHA
             #pragma shader_feature _RECEIVE_SHADOWS
-            #pragma multi_compile _ _DIRECTIONAL_PCF3 _DIRECTIONAL_PCF5 _DIRECTIONAL_PCF7
-            #pragma multi_compile _ _CASCADE_BLEND_SOFT _CASCADE_BLEND_DITHER
             #pragma vertex LitPassVertexProgram
             #pragma fragment LitPassFragmentProgram
             #include "../ShaderLibrary/LitPass.hlsl"

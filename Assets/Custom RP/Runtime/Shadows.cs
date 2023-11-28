@@ -64,12 +64,20 @@ public class Shadows
         "_CASCADE_BLEND_DITHER"
     };
 
+    static string[] shadowMaskKeywords = 
+    {
+        "_SHADOW_MASK_DISTANCE"
+    };
+
+    private bool useShadowMask;
+
     public void Setup(ScriptableRenderContext context, CullingResults cullingResults, ShadowSettings shadowSettings)
     {
         this.context = context;
         this.cullingResults = cullingResults;
         this.settings = shadowSettings;
         ShadowedDirectionalLightCount = 0;
+        useShadowMask = false;//每一帧设置时默认将useShadowMask设置为false
     }
 
     void ExecuteBuffer()
@@ -82,12 +90,22 @@ public class Shadows
     {
         //判断条件：
         //1.产生阴影的Directional Light数量限制
-        //2.光源的阴影：shadows设置不为None、阴影强度大于零
-        //3.光源不影响投射阴影的物体（被设置为这样，或是影响的物体距离超过了最大阴影距离
+        //2.光源的阴影：shadows设置不为None、阴影强度大于零--光源本身的设置
+        //3.光源不影响投射阴影的物体（被设置为这样，或是影响的物体距离超过了最大阴影距离，目前暂时只考虑了距离超出最大阴影距离的情况)--即光源对于实际的阴影渲染是否有效
         if (ShadowedDirectionalLightCount < MaxShadowedDirectionalLightCount &&
             light.shadows != LightShadows.None && light.shadowStrength > 0f &&
             cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b))
         {
+            //check是否有光源使用shadowmask,判断条件：
+            //1.光源的Mode为Mixed
+            //2.LightSetting中的Mixed Lighting--Lighting Mode为Shadowmask
+            //每个光源的Light.backingOutput属性中均含有Baked Data，通过该属性来获取相关信息
+            LightBakingOutput lightBaking = light.bakingOutput;
+            if (lightBaking.lightmapBakeType == LightmapBakeType.Mixed &&
+                lightBaking.mixedLightingMode == MixedLightingMode.Shadowmask)
+            {
+                useShadowMask = true;
+            }
             ShadowedDirectionalLights[ShadowedDirectionalLightCount] = new ShadowedDirectionalLight
             {
                 visibleLightIndex = visibleLightIndex,
@@ -120,6 +138,11 @@ public class Shadows
             buffer.ClearRenderTarget(true, false, Color.clear);
             ExecuteBuffer();
         }
+        //在Render的最后设置Keywords，无论是否启用实时阴影都需要进行设置
+        buffer.BeginSample(bufferName);
+        SetKeywords(shadowMaskKeywords, useShadowMask ? 0 : -1);
+        buffer.EndSample(bufferName);
+        ExecuteBuffer();
     }
 
     void RenderDirectionalShadows()
@@ -152,6 +175,7 @@ public class Shadows
         {
             RenderDirectionalShadows(i, split, tileSize);
         }
+
         //在渲染完阴影之后将相关信息发送到GPU
         //发送Cascade相关信息
         buffer.SetGlobalInt(cascadeCountId, settings.directional.cascadeCount);
@@ -168,9 +192,9 @@ public class Shadows
         //maxDistance和distanceFade分别作为shadow fading计算中的m项和f项，都是在分母上的。因为是常量，所以在数据传输时直接传入其倒数，则只需要进行一次取倒数
         //可以优化逐Fragment的Shadow Fading计算中的求倒数
         //第三个参数用于计算cascade shadow的衰减，为了保证球体的衰减率不变，f需要变为1 - （ 1 - f ）^2
-        SetKeywords(directionalFilterKeywords, (int)settings.directional.filter - 1);//设置阴影的filter mode
-        SetKeywords(cascadeBlendKeywords, (int)settings.directional.cascadeBlend - 1);//设置cascade阴影的blend模式
-        buffer.SetGlobalVector(shadowAtlasSizeId, new Vector4(atlasSize, 1f / atlasSize));//传入Shadow Atlas的大小
+        SetKeywords(directionalFilterKeywords, (int)settings.directional.filter - 1); //设置阴影的filter mode
+        SetKeywords(cascadeBlendKeywords, (int)settings.directional.cascadeBlend - 1); //设置cascade阴影的blend模式
+        buffer.SetGlobalVector(shadowAtlasSizeId, new Vector4(atlasSize, 1f / atlasSize)); //传入Shadow Atlas的大小
         buffer.EndSample(bufferName);
         ExecuteBuffer();
     }
@@ -189,7 +213,8 @@ public class Shadows
         //用这个就很好理解计算ShadowMatrices函数中的i、cascadeCount参数，以及tileIndex所表示的行索引的作用
         Vector3 ratios = settings.directional.CascadeRatios;
 
-        float cullingFactor = Mathf.Max(0f, 0.8f - settings.directional.cascadeFade);//使用0.8控制是为了减小对处于cascade交界处shadow caster的影响
+        float cullingFactor =
+            Mathf.Max(0f, 0.8f - settings.directional.cascadeFade); //使用0.8控制是为了减小对处于cascade交界处shadow caster的影响
 
         for (int i = 0; i < cascadeCount; i++)
         {
@@ -202,13 +227,13 @@ public class Shadows
             //     out Matrix4x4 viewMatrix, out Matrix4x4 projectionMatrix, //然后是V、P矩阵
             //     out ShadowSplitData splitData); //最后一个是split data，包含shadow-casting的物体该如何被剔除的信息
             cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(
-                light.visibleLightIndex, 
-                i, cascadeCount, ratios, tileSize, 
+                light.visibleLightIndex,
+                i, cascadeCount, ratios, tileSize,
                 light.nearPlaneOffset,
                 out Matrix4x4 viewMatrix, out Matrix4x4 projectionMatrix,
                 out ShadowSplitData splitData);
-            
-            if (index == 0)//因为所有光源的cascade是等效的（都是相对于同一个相机），所以只需要对第一个光源进行处理即可
+
+            if (index == 0) //因为所有光源的cascade是等效的（都是相对于同一个相机），所以只需要对第一个光源进行处理即可
             {
                 // // cascadeCullingSpheres[i] = splitData.cullingSphere;//Culling Sphere的信息从splitData中获取
                 // Vector4 cullingSphere = splitData.cullingSphere;
@@ -216,10 +241,11 @@ public class Shadows
                 // cascadeCullingSpheres[i] = cullingSphere;
                 // //因为判断cascade等级是通过判断fragment是否在这个cascade求体内进行的，最后是将fragment到球心的距离与球的半径进行比较
                 // //避免计算低效的平方根，优化为比较平方值；并且在CPU中完成对距离平方的计算
-                SetCascadeData(i, splitData.cullingSphere, tileSize);//通过SetCascadeData函数进行统一的Cascade相关数据处理
+                SetCascadeData(i, splitData.cullingSphere, tileSize); //通过SetCascadeData函数进行统一的Cascade相关数据处理
             }
 
-            splitData.shadowCascadeBlendCullingFactor = cullingFactor;//半径的乘数，用于控制cascade culling sphere的半径缩放。缩小culling sphere的大小，提高shadow caster
+            splitData.shadowCascadeBlendCullingFactor =
+                cullingFactor; //半径的乘数，用于控制cascade culling sphere的半径缩放。缩小culling sphere的大小，提高shadow caster
             //的渲染效率，在交界处用更高层级的cascade替代当前层级
             shadowDrawSettings.splitData = splitData; //将Split data传输给shadowSettings
             int tileIndex = tileOffset + i;
@@ -231,7 +257,7 @@ public class Shadows
                     split); //获得从世界空间到光源裁剪空间的变化矩阵（矩阵相乘是左乘）,同时把矩阵转换为运用了Atlas多组Shadowmap的形态，并在内部调用SetTileViewport函数，既实现Tile的buffer设置，又获得了offset的返回值
             buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
             // buffer.SetGlobalDepthBias(0f, 3f); -- Depth Bias会造成Perter-Panning的Artifact；使用Slope Bias能获得还算不错的效果，但是不够直观
-            buffer.SetGlobalDepthBias(0f, light.slopeScaleBias);//此处的Slope Bias是逐光源设置的，用于解决阴影采样溢出，导致不同物体间接缝初产生异样阴影的问题
+            buffer.SetGlobalDepthBias(0f, light.slopeScaleBias); //此处的Slope Bias是逐光源设置的，用于解决阴影采样溢出，导致不同物体间接缝初产生异样阴影的问题
             ExecuteBuffer();
             context.DrawShadows(ref shadowDrawSettings);
             // buffer.SetGlobalDepthBias(0f, 0f);
@@ -242,15 +268,17 @@ public class Shadows
     void SetCascadeData(int index, Vector4 cullingSphere, float tileSize)
     {
         float texelSize = 2f * cullingSphere.w / tileSize;
-        float filterSize = texelSize * ((float)settings.directional.filter + 1f);//优化使用PCF制作软阴影后的深度采样问题
+        float filterSize = texelSize * ((float)settings.directional.filter + 1f); //优化使用PCF制作软阴影后的深度采样问题
 
-        cullingSphere.w -= filterSize;//避免在culling范围之外采样
+        cullingSphere.w -= filterSize; //避免在culling范围之外采样
         cullingSphere.w *= cullingSphere.w;
-        
-        texelSize *= 1.4142136f;//得到的TexelSize是平方后的值，在最坏的情况下我们需要沿着45度角进行偏移，所以需要乘上一个根号二
+
+        texelSize *= 1.4142136f; //得到的TexelSize是平方后的值，在最坏的情况下我们需要沿着45度角进行偏移，所以需要乘上一个根号二
         cascadeCullingSpheres[index] = cullingSphere;
         // cascadeData[index].x = 1f / cullingSphere.w;//传入一个CullingSphere的半径的倒数，避免在shader中进行逐片元的除法计算
-        cascadeData[index] = new Vector4(1f / cullingSphere.w, texelSize, filterSize * 1.4142136f);//所以最终的偏移值取决于每个tile的shadowAtlasMap的大小，以及当前cascade下culling sphere的半径大小
+        cascadeData[index] =
+            new Vector4(1f / cullingSphere.w, texelSize,
+                filterSize * 1.4142136f); //所以最终的偏移值取决于每个tile的shadowAtlasMap的大小，以及当前cascade下culling sphere的半径大小
         //至于2f和根号二，我认为是一个权衡后取的数据；同时注意，这里的tileSize指的是每一个小分块的分辨率，而不是整个atlas的分辨率
     }
 
@@ -306,6 +334,7 @@ public class Shadows
             }
         }
     }
+
     public void CleanUp()
         //回收创建的RT的内存
     {
