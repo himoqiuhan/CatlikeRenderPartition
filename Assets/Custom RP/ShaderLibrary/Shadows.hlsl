@@ -43,12 +43,20 @@ struct DirectionalShadowData
     float normalBias;
 };
 
-//因为Cascade Shadow是逐Fragment的信息，不适逐光源的信息，所以新建一个存储Shadow数据的结构体来处理
+//Shader端存储ShadowMask的信息，其中包括一个bool来指明是否使用distance shadow mask
+struct CustomShadowMask
+{
+    bool distance;
+    float4 shadows;
+};
+
+//因为Cascade Shadow是逐Fragment的信息，不是逐光源的信息，所以新建一个存储Shadow数据的结构体来处理
 struct CustomShadowData
 {
     int cascadeIndex;
     float cascadeBlend;//用于处理临近cascade之间的插值计算
     float strength;//用于处理超出cascade分级的阴影，实际上如果Fragment阴影超出最远Cascade范围就不该采样阴影贴图了
+    CustomShadowMask shadowMask;//将ShadowMask作为字段添加到ShadowData中
 };
 
 float SampleDirectionalShadowAtlas(float3 positionSTS)
@@ -119,6 +127,9 @@ float FadeShadowStrength(float distance, float scale, float fade)
 CustomShadowData GetShadowData (Surface surfaceWS)
 {
     CustomShadowData data;
+    //默认设置shadowMask不启用
+    data.shadowMask.distance = false;
+    data.shadowMask.shadows = 1.0;
     data.cascadeBlend = 1.0;//默认当前的cascade是满强度的
     // data.strength = 1.0;//默认返回1，表示在cascade阴影内
     // data.strength = surfaceWS.depth < _ShadowDistance ? 1.0 : 0.0;//进行深度判断来确定shadow strength的默认值

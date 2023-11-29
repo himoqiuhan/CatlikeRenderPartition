@@ -28,8 +28,7 @@ Varyings BaseVertexProgram(Attributes vertexInput)
     UNITY_SETUP_INSTANCE_ID(vertexInput);
     UNITY_TRANSFER_INSTANCE_ID(vertexInput, vertexOutput);
     vertexOutput.posCS = TransformObjectToHClip(vertexInput.posOS.xyz);
-    float4 mainTexST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _MainTex_ST);
-    vertexOutput.uv = TransformBaseUV(mainTexST);
+    vertexOutput.uv = TransformBaseUV(vertexInput.uv);
     return vertexOutput;
 }
 

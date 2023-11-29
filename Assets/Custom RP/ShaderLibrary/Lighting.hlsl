@@ -9,6 +9,9 @@ float3 InComingLight(Surface surface, Light light);
 float3 GetLighting(Surface surfaceWS, BRDF brdf, GI gi)
 {
     CustomShadowData shadowData = GetShadowData(surfaceWS);
+    //在GetLighting时将GI中shadowMask的数据传递给shadowData，用于后续实际的光照计算
+    shadowData.shadowMask = gi.shadowMask;
+    //return gi.shadowMask.shadows;//Debug for shadowmask
     float3 color = gi.diffuse * brdf.diffuse;//GI -- GI颜色乘上物体的漫反射率
     for (int i = 0; i < GetDirectionalLightCount(); i++)
     {

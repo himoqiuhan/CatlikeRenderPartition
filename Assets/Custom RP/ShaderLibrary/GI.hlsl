@@ -19,12 +19,18 @@
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
 
+//因为一开始include了core.hlsl，导致一些贴图已经被声明了，可以直接用
+
 // TEXTURE2D(unity_Lightmap);
-SAMPLER(samplerunity_lightmap);
+// SAMPLER(samplerunity_Lightmap);
+
+// TEXTURE2D(unity_ShadowMask);
+// SAMPLER(samplerunity_ShadowMask);
 
 struct GI
 {
     float3 diffuse;
+    CustomShadowMask shadowMask;
 };
 
 
@@ -77,11 +83,42 @@ float SampleLightProbe(Surface surfaceWS)
     #endif
 }
 
+//采样BakedShadow，如果开启LIGHTMAP，则采样shadow mask，如果没有开启则返回值为1的attenuation
+float4 SampleBakedShadows(float2 lightMapUV)
+{
+    #if defined(LIGHTMAP_ON)
+        return SAMPLE_TEXTURE2D(unity_ShadowMask, samplerunity_ShadowMask, lightMapUV);
+    #else
+    //对于Dynamic物体使用ProbesOcclusion
+        return unity_ProbesOcclusion;
+    //如果使用LPPV：
+    // if (unity_ProbeVolumeParams.x) {
+    //     return SampleProbeOcclusion(
+    //         TEXTURE3D_ARGS(unity_ProbeVolumeSH, samplerunity_ProbeVolumeSH),
+    //         surfaceWS.position, unity_ProbeVolumeWorldToObject,
+    //         unity_ProbeVolumeParams.y, unity_ProbeVolumeParams.z,
+    //         unity_ProbeVolumeMin.xyz, unity_ProbeVolumeSizeInv.xyz
+    //     );
+    // }
+    // else {
+    //     return unity_ProbesOcclusion;
+    // }
+    #endif
+}
+
 
 GI GetGI(float2 lightMapUV, Surface surfaceWS)
 {
     GI gi;
     gi.diffuse = SampleLightMap(lightMapUV) + SampleLightProbe(surfaceWS);
+    gi.shadowMask.distance = false;
+    gi.shadowMask.shadows = 1.0;
+
+    //make distance boolean compile-time constant，所以shadowmask.distance带来的是静态分支
+    #if defined(_SHADOW_MASK_DISTANCE)
+        gi.shadowMask.distance = true;
+        gi.shadowMask.shadows = SampleBakedShadows(lightMapUV);
+    #endif
     return gi;
 }
 

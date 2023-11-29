@@ -3,17 +3,18 @@
 
 // CBUFFER_START(UnityPerDraw)
 //  //GPU接收light map的相关计算参数
-//  // float4 unity_LightmapST;
+//  float4 unity_LightmapST;
+//  float4 unity_ProbesOcclusion; //ShadowMask的Occlusion Probes
 //  // float4 unity_DynamicLightmapST; //For SRP batcher compatibility
 //
 //  //GPU接收light probe的相关计算参数：
-//  // float4 unity_SHAr;
-//  // float4 unity_SHAg;
-//  // float4 unity_SHAb;
-//  // float4 unity_SHBr;
-//  // float4 unity_SHBg;
-//  // float4 unity_SHBb;
-//  // float4 unity_SHC;
+//  float4 unity_SHAr;
+//  float4 unity_SHAg;
+//  float4 unity_SHAb;
+//  float4 unity_SHBr;
+//  float4 unity_SHBg;
+//  float4 unity_SHBb;
+//  float4 unity_SHC;
 //
 //  //GPU接收light probe proxy volume(LPPV)的相关计算参数
 // float4 unity_ProbeVolumeParams;

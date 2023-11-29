@@ -52,8 +52,10 @@ public class MeshBall : MonoBehaviour
                 }
 
                 var lightProbes = new SphericalHarmonicsL2[1023];//Light Probes必须由这个类型的数组提供，并且由以下函数计算
-                LightProbes.CalculateInterpolatedLightAndOcclusionProbes(positions, lightProbes, null);//第三个参数用于控制occlusion，此处设置为null
+                var occlusionProbes = new Vector4[1023];
+                LightProbes.CalculateInterpolatedLightAndOcclusionProbes(positions, lightProbes, occlusionProbes);//第三个参数用于控制occlusion
                 block.CopySHCoefficientArraysFrom(lightProbes);
+                block.CopyProbeOcclusionArrayFrom(occlusionProbes);
             }
         }
         Graphics.DrawMeshInstanced(mesh, 0, material, matrices, 1023, block,

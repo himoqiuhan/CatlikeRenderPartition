@@ -15,8 +15,7 @@ Shader "CustomRP/Unlit"
     SubShader
     {
         HLSLINCLUDE
-        #include "../ShaderLibrary/Common.hlsl"
-        #include "../ShaderLibrary/UnlitInput.hlsl"
+        
         ENDHLSL
         Tags
         {
@@ -33,6 +32,8 @@ Shader "CustomRP/Unlit"
             #pragma shader_feature _CLIPPING
             #pragma vertex BaseVertexProgram
             #pragma fragment BaseFragmentProgram
+            #include "../ShaderLibrary/Common.hlsl"
+            #include "../ShaderLibrary/UnlitInput.hlsl"
             #include "../ShaderLibrary/UnlitPass.hlsl"
             ENDHLSL
         }
@@ -51,6 +52,8 @@ Shader "CustomRP/Unlit"
             #pragma multi_compile_instancing
             #pragma vertex ShadowCasterPassVertexProgram
             #pragma fragment ShadowCasterPassFragmentProgram
+            #include "../ShaderLibrary/Common.hlsl"
+            #include "../ShaderLibrary/UnlitInput.hlsl"
             #include "../ShaderLibrary/ShadowCasterPass.hlsl"
             ENDHLSL
         }
@@ -69,6 +72,7 @@ Shader "CustomRP/Unlit"
             #pragma target 3.5
             #pragma vertex MetaPassVertexProgram
             #pragma fragment MetaPassFragmentProgram
+            #include "../ShaderLibrary/Common.hlsl"
             #include "../ShaderLibrary/MetaPass.hlsl"
             ENDHLSL
         }
