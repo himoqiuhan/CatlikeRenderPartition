@@ -66,6 +66,7 @@ public class Shadows
 
     static string[] shadowMaskKeywords = 
     {
+        "_SHADOW_MASK_ALWAYS",
         "_SHADOW_MASK_DISTANCE"
     };
 
@@ -86,16 +87,20 @@ public class Shadows
         buffer.Clear();
     }
 
-    public Vector3 ReserveDirectionalShadows(Light light, int visibleLightIndex)
+    public Vector4 ReserveDirectionalShadows(Light light, int visibleLightIndex)
     {
         //判断条件：
         //1.产生阴影的Directional Light数量限制
         //2.光源的阴影：shadows设置不为None、阴影强度大于零--光源本身的设置
-        //3.光源不影响投射阴影的物体（被设置为这样，或是影响的物体距离超过了最大阴影距离，目前暂时只考虑了距离超出最大阴影距离的情况)--即光源对于实际的阴影渲染是否有效
+        // XXX 3.光源不影响投射阴影的物体（被设置为这样，或是影响的物体距离超过了最大阴影距离，目前暂时只考虑了距离超出最大阴影距离的情况)--即光源对于实际的阴影渲染是否有效
+            //替换为不影响物体时换用Baked Shadowmask
         if (ShadowedDirectionalLightCount < MaxShadowedDirectionalLightCount &&
-            light.shadows != LightShadows.None && light.shadowStrength > 0f &&
-            cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b))
+            light.shadows != LightShadows.None && light.shadowStrength > 0f //&&
+            //cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b)
+            )
         {
+            //maskChannel用于传递光源对应shadowmap所以用的通道
+            float maskChannel = -1;
             //check是否有光源使用shadowmask,判断条件：
             //1.光源的Mode为Mixed
             //2.LightSetting中的Mixed Lighting--Lighting Mode为Shadowmask
@@ -105,19 +110,32 @@ public class Shadows
                 lightBaking.mixedLightingMode == MixedLightingMode.Shadowmask)
             {
                 useShadowMask = true;
+                //获取当前light的shadowmask所在通道
+                maskChannel = lightBaking.occlusionMaskChannel;
             }
+            
+            //如果光源不影响投射阴影的物体，则直接返回light的shadowStrength
+            if (!cullingResults.GetShadowCasterBounds(
+                    visibleLightIndex, out Bounds b
+                    ))
+            {
+                //还是不太理解这里传入-的原因
+                return new Vector4(-light.shadowStrength, 0f, 0f, maskChannel);
+            }
+            
             ShadowedDirectionalLights[ShadowedDirectionalLightCount] = new ShadowedDirectionalLight
             {
                 visibleLightIndex = visibleLightIndex,
                 slopeScaleBias = light.shadowBias,
                 nearPlaneOffset = light.shadowNearPlane
             };
-            return new Vector3(light.shadowStrength,
+            return new Vector4(light.shadowStrength,
                 settings.directional.cascadeCount * ShadowedDirectionalLightCount++,
-                light.shadowNormalBias);
+                light.shadowNormalBias,
+                maskChannel);
         }
 
-        return Vector3.zero;
+        return new Vector4(0f,0f,0f,-1f);
     }
 
     public void Render()
@@ -140,7 +158,10 @@ public class Shadows
         }
         //在Render的最后设置Keywords，无论是否启用实时阴影都需要进行设置
         buffer.BeginSample(bufferName);
-        SetKeywords(shadowMaskKeywords, useShadowMask ? 0 : -1);
+        //在QualitySetting中可以获取使用shadowmask的模式
+        SetKeywords(shadowMaskKeywords, useShadowMask ? 
+            QualitySettings.shadowmaskMode == ShadowmaskMode.Shadowmask ? 0 : 1 : 
+            -1);
         buffer.EndSample(bufferName);
         ExecuteBuffer();
     }

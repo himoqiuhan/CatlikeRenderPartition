@@ -41,11 +41,14 @@ struct DirectionalShadowData
     float strength;
     int tileIndex;
     float normalBias;
+    //Shadowmask是逐光源的属性，应当存储在光源的shadow data中
+    int shadowMaskChannel;
 };
 
 //Shader端存储ShadowMask的信息，其中包括一个bool来指明是否使用distance shadow mask
 struct CustomShadowMask
 {
+    bool always;
     bool distance;
     float4 shadows;
 };
@@ -86,15 +89,11 @@ float FilterDirectionalShadow(float3 positionSTS)
     #endif
 }
 
-float GetDirectionalShadowAttenuation(DirectionalShadowData directional, CustomShadowData global, Surface surfaceWS)
+//为了混合Baked Shadow和Realtime Shadow，以及提高可读性，需要拆分函数
+//Realtime Shadow
+float GetCascadedShadow(DirectionalShadowData directional, CustomShadowData global, Surface surfaceWS)
 {
-    #if !defined(_RECEIVE_SHADOWS)
-     return 1.0f;
-    #endif
-    if (directional.strength <= 0.0)//在Shader中用动态分支，在过去是低效的，但是现代GPU能妥善处理他们。但是需要记住，所有fragment都会执行每一个动态分支中的全部内容
-    {
-        return 1.0;
-    }
+    
     float3 normalBias = surfaceWS.normal * (directional.normalBias * _CascadeData[global.cascadeIndex].y);//在世界空间下进行偏移，偏移的数值由CPU发送而来
     //normal bias的控制既有全局控制，又有逐个光源的控制
     float3 positionSTS = mul(_DirectionalShadowMatrices[directional.tileIndex], float4(surfaceWS.position + normalBias, 1.0)).xyz;
@@ -111,7 +110,69 @@ float GetDirectionalShadowAttenuation(DirectionalShadowData directional, CustomS
         //基于计算出的cascadeBlend（当前cascade Sphere的Fade值）对两个阴影进行插值
         shadow = lerp(FilterDirectionalShadow(positionSTS), shadow, global.cascadeBlend);
     }
-    return lerp(1.0, shadow, directional.strength);
+    return shadow;
+}
+
+//Baked Shadow
+float GetBakedShadow(CustomShadowMask mask, int channel)
+{
+    float shadow = 1.0;
+    if (mask.always || mask.distance)
+    {
+        if(channel >= 0)
+        {
+            shadow = mask.shadows[channel];
+        }
+    }
+    return shadow;
+}
+//通过多传入strength实现函数的Variation：用于处理完全使用Baked Shadow的情况（超出Max Shadow Distance）
+float GetBakedShadow(CustomShadowMask mask, int channel, float strength)
+{
+    if (mask.always || mask.distance)
+    {
+        return lerp(1.0, GetBakedShadow(mask, channel), strength);
+    }
+    return 1.0;
+}
+
+//Blend Realtime Shadows and Baked Shadows
+//传入ShadowData、Realtime Shadow数据、Shadow强度
+float MixBakedAndRealtimeShadows(CustomShadowData global, float shadow, int shadowMaskChannel, float strength)
+{
+    float baked = GetBakedShadow(global.shadowMask, shadowMaskChannel);
+    if(global.shadowMask.always)
+    {
+        shadow = lerp(1.0, shadow, global.strength);
+        shadow = min(baked, shadow);
+        return lerp(1.0, shadow, strength);
+    }
+    if (global.shadowMask.distance)
+    {
+        shadow = lerp(baked, shadow, global.strength);//基于shadowData的strength进行阴影的混合，shadowData中strength是通过深度来进行的强度调整，即远处强度低，转换到使用Baked Shadow，近处强度高，使用Realtime Shadow
+        return lerp(1.0, shadow, strength);//基于DirectionalLight本身来控制阴影的强弱（整体的阴影强度）
+    }
+    return lerp(1.0, shadow, strength * global.strength);
+}
+
+float GetDirectionalShadowAttenuation(DirectionalShadowData directional, CustomShadowData global, Surface surfaceWS)
+{
+    #if !defined(_RECEIVE_SHADOWS)
+     return 1.0f;
+    #endif
+
+    float shadow;
+    if (directional.strength * global.strength <= 0.0)//在Shader中用动态分支，在过去是低效的，但是现代GPU能妥善处理他们。但是需要记住，所有fragment都会执行每一个动态分支中的全部内容
+    {
+        shadow = GetBakedShadow(global.shadowMask, directional.shadowMaskChannel, abs(directional.strength));
+    }
+    else
+    {
+        shadow = GetCascadedShadow(directional, global, surfaceWS);
+        shadow = MixBakedAndRealtimeShadows(global, shadow, directional.shadowMaskChannel, directional.strength);
+    }
+    
+    return shadow;
 }
 
 float FadeShadowStrength(float distance, float scale, float fade)
@@ -128,6 +189,7 @@ CustomShadowData GetShadowData (Surface surfaceWS)
 {
     CustomShadowData data;
     //默认设置shadowMask不启用
+    data.shadowMask.always = false;
     data.shadowMask.distance = false;
     data.shadowMask.shadows = 1.0;
     data.cascadeBlend = 1.0;//默认当前的cascade是满强度的

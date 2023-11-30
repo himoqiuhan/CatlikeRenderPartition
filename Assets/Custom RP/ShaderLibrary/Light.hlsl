@@ -20,10 +20,12 @@ struct Light
 DirectionalShadowData GetDirectionalShadowData(int lightIndex, CustomShadowData shadowData)
 {
     DirectionalShadowData data;
-    data.strength = _DirectionalLightShadowData[lightIndex].x * shadowData.strength;//_DirectionalLightShadowData.x存储的是阴影强度
+    //因为要进行Baked Shadowmask和Realtime Shadow的混合，所以不能只是简单地在此处进行阴影的相乘（并且从架构上来说，也不应该在逐光源的GetDirectionalShadowData中运用逐片元控制的shadowData
+    data.strength = _DirectionalLightShadowData[lightIndex].x;// * shadowData.strength;//_DirectionalLightShadowData.x存储的是阴影强度
     //如果在cascade-4之外，则直接将用于计算attenuation的阴影强度设置为0，最终获得的亮度值就为1，获得不接收阴影的效果
     data.tileIndex = _DirectionalLightShadowData[lightIndex].y + shadowData.cascadeIndex;//加上cascadeIndex，获得当前光源正确的cascade阴影
     data.normalBias = _DirectionalLightShadowData[lightIndex].z;
+    data.shadowMaskChannel = _DirectionalLightShadowData[lightIndex].w;
     return data;
 }
 
@@ -38,7 +40,7 @@ Light GetDirectionalLight(int index, Surface surfaceWS, CustomShadowData shadowD
     light.color = _DirectionalLightColors[index].rgb;
     light.direction = _DirectionalLightDirections[index].xyz;
     DirectionalShadowData dirShadowData = GetDirectionalShadowData(index, shadowData);
-    light.attenuation = GetDirectionalShadowAttenuation(dirShadowData, shadowData,surfaceWS);
+    light.attenuation = GetDirectionalShadowAttenuation(dirShadowData, shadowData, surfaceWS);
     // light.attenuation = shadowData.cascadeIndex * 0.25;//使Cascade分级可视化的工具，用cascade来代替实际的阴影贴图采样计算出的attenuation    
     return light;
 }

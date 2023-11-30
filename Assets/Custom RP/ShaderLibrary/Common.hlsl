@@ -1,7 +1,7 @@
 #ifndef CUSTOM_COMMON_INCLUDED
 #define CUSTOM_COMMON_INCLUDED
 
-#if defined(_SHADOW_MASK_DISTANCE)
+#if defined(_SHADOW_MASK_ALWAYS) || defined(_SHADOW_MASK_DISTANCE)
     #define SHADOWS_SHADOWMASK
 #endif
 

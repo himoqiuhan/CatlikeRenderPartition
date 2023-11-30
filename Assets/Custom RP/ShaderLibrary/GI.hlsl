@@ -111,11 +111,15 @@ GI GetGI(float2 lightMapUV, Surface surfaceWS)
 {
     GI gi;
     gi.diffuse = SampleLightMap(lightMapUV) + SampleLightProbe(surfaceWS);
+    gi.shadowMask.always = false;
     gi.shadowMask.distance = false;
     gi.shadowMask.shadows = 1.0;
 
     //make distance boolean compile-time constant，所以shadowmask.distance带来的是静态分支
-    #if defined(_SHADOW_MASK_DISTANCE)
+    #if defined(_SHADOW_MASK_ALWAYS)
+        gi.shadowMask.always = true;
+        gi.shadowMask.shadows = SampleBakedShadows(lightMapUV);
+    #elif defined(_SHADOW_MASK_DISTANCE)
         gi.shadowMask.distance = true;
         gi.shadowMask.shadows = SampleBakedShadows(lightMapUV);
     #endif
