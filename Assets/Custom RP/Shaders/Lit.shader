@@ -45,6 +45,7 @@ Shader "CustomRP/Lit"
             }
             HLSLPROGRAM
             #pragma target 3.5
+            #pragma multi_compile _ LOD_FADE_CROSSFADE //LOD切换模式
             //SRP Settings
             #pragma multi_compile _ _DIRECTIONAL_PCF3 _DIRECTIONAL_PCF5 _DIRECTIONAL_PCF7
             #pragma multi_compile _ _CASCADE_BLEND_SOFT _CASCADE_BLEND_DITHER
@@ -71,6 +72,7 @@ Shader "CustomRP/Lit"
             ColorMask 0
             HLSLPROGRAM
             #pragma target 3.5
+            #pragma multi_compile _ LOD_FADE_CROSSFADE //LOD切换模式
             #pragma shader_feature _ _SHADOWS_CLIP _SHADOWS_DITHER
             #pragma multi_compile_instancing
             #pragma vertex ShadowCasterPassVertexProgram

@@ -63,6 +63,11 @@ Varyings LitPassVertexProgram(Attributes input)
 
 half4 LitPassFragmentProgram(Varyings i) : SV_Target0
 {
+    UNITY_SETUP_INSTANCE_ID(i);
+    //LOD之间的切换
+    #if defined(LOD_FADE_CROSSFADE)
+        return -unity_LODFade.x;
+    #endif
     // half4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
     // half4 mainTexColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
     // half4 base = baseColor * mainTexColor;
