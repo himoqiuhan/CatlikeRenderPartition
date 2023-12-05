@@ -801,7 +801,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!108 &713321125
 Light:
   m_ObjectHideFlags: 0
@@ -1454,7 +1454,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1209726854}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: -0.012}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1590,15 +1590,15 @@ LODGroup:
   m_LastLODIsBillboard: 0
   m_LODs:
   - screenRelativeHeight: 0.6
-    fadeTransitionWidth: 0.8
+    fadeTransitionWidth: 0.531
     renderers:
     - renderer: {fileID: 1313562234}
   - screenRelativeHeight: 0.3
-    fadeTransitionWidth: 0.56
+    fadeTransitionWidth: 0.547
     renderers:
     - renderer: {fileID: 1209726855}
   - screenRelativeHeight: 0.1
-    fadeTransitionWidth: 1
+    fadeTransitionWidth: 0.594
     renderers:
     - renderer: {fileID: 486080503}
   m_Enabled: 1
@@ -1610,7 +1610,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1322858147}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1.1878142, y: 8.036034, z: 10.655711}
+  m_LocalPosition: {x: 0.02, y: 7.562, z: 10.41}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:

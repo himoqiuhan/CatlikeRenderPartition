@@ -52,6 +52,8 @@ Varyings ShadowCasterPassVertexProgram(Attributes input)
 
 void ShadowCasterPassFragmentProgram(Varyings i)
 {
+    UNITY_SETUP_INSTANCE_ID(i);
+    ClipLOD(i.positionCS.xy, unity_LODFade.x);
     // half4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
     // half4 mainTexColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
     // half4 base = baseColor * mainTexColor;
