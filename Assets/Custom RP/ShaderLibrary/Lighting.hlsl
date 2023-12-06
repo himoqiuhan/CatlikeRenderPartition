@@ -12,7 +12,8 @@ float3 GetLighting(Surface surfaceWS, BRDF brdf, GI gi)
     //在GetLighting时将GI中shadowMask的数据传递给shadowData，用于后续实际的光照计算
     shadowData.shadowMask = gi.shadowMask;
     //return gi.shadowMask.shadows;//Debug for shadowmask
-    float3 color = gi.diffuse * brdf.diffuse;//GI -- GI颜色乘上物体的漫反射率
+    // float3 color = gi.diffuse * brdf.diffuse;//GI -- GI颜色乘上物体的漫反射率
+    float3 color = IndirectBRDF(surfaceWS, brdf, gi.diffuse, gi.specular);//GI统一在IndirectBRDF中处理，计算GI的漫反射和反射
     for (int i = 0; i < GetDirectionalLightCount(); i++)
     {
         Light light = GetDirectionalLight(i, surfaceWS, shadowData);

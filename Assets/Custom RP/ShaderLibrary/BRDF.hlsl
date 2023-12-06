@@ -10,6 +10,8 @@ struct BRDF
     float3 diffuse;
     float3 specular;
     float roughness;
+    float perceptualRoughness;//用于获取environment map的mip等级
+    float fresnel;
 };
 
 float OneMinusReflectivity(float metallic)
@@ -28,7 +30,9 @@ BRDF GetBRDF(Surface surface, bool applyAlphaToDiffuse = false)
         brdf.diffuse *= surface.alpha;
     }
     brdf.specular = lerp(MIN_REFLECTIVITY, surface.color, surface.metallic);//金属表面会影响高光反射颜色，而非金属表面不会影响高光反射颜色
-    brdf.roughness = PerceptualSmoothnessToRoughness(surface.smoothness);
+    brdf.perceptualRoughness = PerceptualSmoothnessToPerceptualRoughness(surface.smoothness);
+    brdf.roughness = PerceptualRoughnessToRoughness(brdf.perceptualRoughness);
+    brdf.fresnel = saturate(surface.smoothness + 1.0 - oneMinusReflectivity);
     return brdf;
 }
 
@@ -47,6 +51,17 @@ float SpecularStrengh(Surface surface, BRDF brdf, Light light)
 float3 DirectBRDF(Surface surface, BRDF brdf, Light light)
 {
     return SpecularStrengh(surface, brdf, light) * brdf.specular + brdf.diffuse;
+}
+
+float3 IndirectBRDF(Surface surface, BRDF brdf, float3 diffuse, float3 specular)
+{
+    //Schlick's approximation for Fresnel
+    float fresnelStrength = Pow4(1.0 - saturate(dot(surface.normal, surface.viewDirection))) * surface.fresnelStrength;
+    float3 reflection = specular * lerp(brdf.specular, brdf.fresnel, fresnelStrength);
+    //粗糙度影响Reflection强度，除以粗糙度的平方加一，使得高粗糙度不易显示反射，而低粗糙度会产生反射
+    reflection /= brdf.roughness * brdf.roughness + 1.0;
+    
+    return diffuse * brdf.diffuse + reflection;
 }
 
 #endif

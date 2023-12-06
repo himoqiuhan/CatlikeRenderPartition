@@ -7,7 +7,7 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: CustomRP_Lit_Opaque
+  m_Name: CustomRP_Lit_Opaque_Metal
   m_Shader: {fileID: 4800000, guid: b7496f05c911a0840a47026868ff896d, type: 3}
   m_ValidKeywords:
   - _RECEIVE_SHADOWS
@@ -35,15 +35,15 @@ Material:
     - _Clipping: 0
     - _Cutoff: 0.5
     - _DstBlend: 0
-    - _Fresnel: 0.234
-    - _Metallic: 0
+    - _Fresnel: 1
+    - _Metallic: 1
     - _PreMulAlpha: 0
     - _ReceiveShadows: 1
     - _Shadows: 0
-    - _Smoothness: 0.423
+    - _Smoothness: 0.849
     - _SrcBlend: 1
     - _ZWrite: 1
     m_Colors:
-    - _BaseColor: {r: 0.3915094, g: 1, b: 0.6131859, a: 1}
+    - _BaseColor: {r: 0.504717, g: 1, b: 0.683658, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 0}
   m_BuildTextureStacks: []

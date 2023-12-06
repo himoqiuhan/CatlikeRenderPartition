@@ -117,10 +117,12 @@ public partial class CameraRenderer
         {
             enableDynamicBatching = useDynamicBatching,
             enableInstancing = useGPUInstancing,
-            perObjectData = PerObjectData.Lightmaps | PerObjectData.ShadowMask | //告诉管线使用lightmap(/ShadowMask),用于获取并传输lightmap(/ShadowMask)的UV到shader中
-                            PerObjectData.LightProbe |  PerObjectData.OcclusionProbe | //Light(/Occlusion) Probe的object
-                            PerObjectData.LightProbeProxyVolume | //Light Probe Proxy Volume的object
-                            PerObjectData.OcclusionProbeProxyVolume
+            perObjectData = 
+                PerObjectData.ReflectionProbes | //反射探针
+                PerObjectData.Lightmaps | PerObjectData.ShadowMask | //告诉管线使用lightmap(/ShadowMask),用于获取并传输lightmap(/ShadowMask)的UV到shader中
+                PerObjectData.LightProbe |  PerObjectData.OcclusionProbe | //Light(/Occlusion) Probe的object
+                PerObjectData.LightProbeProxyVolume | //Light Probe Proxy Volume的object
+                PerObjectData.OcclusionProbeProxyVolume
                                                                               
         };
         //添加一个新的光照模型LightMode

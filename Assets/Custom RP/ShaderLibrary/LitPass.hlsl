@@ -97,11 +97,12 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
     surface.metallic = GetMetallic(i.uv);
     // surface.smoothness = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Smoothness);
     surface.smoothness = GetSmoothness(i.uv);
+    surface.fresnelStrength = GetFresnel(i.uv);
     surface.dither = InterleavedGradientNoise(i.positionCS.xy, 0);//使用Core.hlsl中的函数来计算dither扰动采样位置
     //输入的第一个参数是SS的XY position，Fragment Shader中等效于CS的XY position；第二个参数用于控制其动画，不需要动画则直接使用0
 
     //Deal with GI
-    GI gi = GetGI(GI_FRAGMENT_DATA(i), surface);
+    //GI gi = GetGI(GI_FRAGMENT_DATA(i), surface);
     // return half4(gi.diffuse,1.0);
     
     float4 color;
@@ -110,6 +111,7 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
     #else
     BRDF brdf = GetBRDF(surface);
     #endif
+    GI gi = GetGI(GI_FRAGMENT_DATA(i), surface, brdf);
     color.rgb = GetLighting(surface, brdf, gi) + GetEmission(i.uv);
     color.a = surface.alpha;
 

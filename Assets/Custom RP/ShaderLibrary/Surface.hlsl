@@ -11,6 +11,7 @@ struct Surface
     float alpha;
     float metallic;
     float smoothness;
+    float fresnelStrength;
     float dither;//用于处理抖动--单次采样实现阴影cascade之间的过渡
 };
 

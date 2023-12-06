@@ -5,6 +5,7 @@
 //  //GPU接收light map的相关计算参数
 //  float4 unity_LightmapST;
 //  float4 unity_ProbesOcclusion; //ShadowMask的Occlusion Probes
+//  float4 unity_SpecCube0_HDR; //For Probes Decoding
 //  // float4 unity_DynamicLightmapST; //For SRP batcher compatibility
 //
 //  //GPU接收light probe的相关计算参数：

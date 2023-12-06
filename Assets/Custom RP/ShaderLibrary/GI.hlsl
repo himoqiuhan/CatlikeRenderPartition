@@ -1,6 +1,10 @@
 #ifndef CUSTOM_GI_INCLUDE
 #define CUSTOM_GI_INCLUDE
 
+//声明用于环境反射的CubeMap
+// TEXTURECUBE(unity_SpecCube0);
+// SAMPLER(samplerunity_SpecCube0);
+
 
 //为了便捷控制GI的开启和关闭，使用宏定义来对GI相关信息进行处理
 #if defined(LIGHTMAP_ON)
@@ -18,6 +22,7 @@
 #endif
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/ImageBasedLighting.hlsl"
 
 //因为一开始include了core.hlsl，导致一些贴图已经被声明了，可以直接用
 
@@ -30,6 +35,7 @@
 struct GI
 {
     float3 diffuse;
+    float3 specular;
     CustomShadowMask shadowMask;
 };
 
@@ -106,11 +112,25 @@ float4 SampleBakedShadows(float2 lightMapUV)
     #endif
 }
 
+//采样环境Cubemap
+float3 SampleEnvironment(Surface surfaceWS, BRDF brdf)
+{
+    float3 uvw = reflect(-surfaceWS.viewDirection, surfaceWS.normal);
+    //通过PerceptualRoughness获取Mip等级
+    float mip = PerceptualRoughnessToMipmapLevel(brdf.perceptualRoughness);
+    float4 environment = SAMPLE_TEXTURECUBE_LOD(
+        unity_SpecCube0, samplerunity_SpecCube0, uvw, mip
+        );
 
-GI GetGI(float2 lightMapUV, Surface surfaceWS)
+    return DecodeHDREnvironment(environment, unity_SpecCube0_HDR);
+}
+
+
+GI GetGI(float2 lightMapUV, Surface surfaceWS, BRDF brdf)
 {
     GI gi;
     gi.diffuse = SampleLightMap(lightMapUV) + SampleLightProbe(surfaceWS);
+    gi.specular = SampleEnvironment(surfaceWS, brdf);
     gi.shadowMask.always = false;
     gi.shadowMask.distance = false;
     gi.shadowMask.shadows = 1.0;
