@@ -109,4 +109,12 @@ float GetOcclusiton(float2 baseUV)
     return occlusion;
 }
 
+float3 GetNormalTS(float2 baseUV)
+{
+    float4 map = SAMPLE_TEXTURE2D(_NormalMap, sampler_MainTex, baseUV);
+    float scale = INPUT_PROP(_NormalScale);
+    float3 normal = DecodeNormal(map, scale);
+    return normal;
+}
+
 #endif
