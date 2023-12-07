@@ -37,7 +37,8 @@ struct Varyings
     float4 positionCS : SV_POSITION;
     float3 positionWS : VAR_PISITION;
     float3 normalWS : VAR_NORMAL;
-    float2 uv : VAR_MAIN_UV;
+    float2 baseUV : VAR_MAIN_UV;
+    float2 detailUV : VAR_DETAIL_UV;
     GI_VARYINGS_DATA
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
@@ -57,7 +58,8 @@ Varyings LitPassVertexProgram(Attributes input)
     output.normalWS = vertexNormalInputs.normalWS;
     // float4 mainTexST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _MainTex_ST);
     // output.uv = input.uv * mainTexST.xy + mainTexST.zw;
-    output.uv = TransformBaseUV(input.uv);
+    output.baseUV = TransformBaseUV(input.uv);
+    output.detailUV = TransformDetailUV(input.uv);
     return output;
 }
 
@@ -72,7 +74,7 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
     // half4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
     // half4 mainTexColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
     // half4 base = baseColor * mainTexColor;
-    float4 base = GetBase(i.uv);
+    float4 base = GetBase(i.baseUV, i.detailUV);
     // color.rgb = normalize(i.normalWS);
     //在进行线性插值时，每个片元得到的法线并不是等长的
     // color.rgb = abs(length(i.normalWS)-1.0) * 10.0;
@@ -82,7 +84,7 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
     //Deal with Clipping
     #if defined(_CLIPPING)
         // clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
-        clip(base.a - GetCutOff(i.uv));
+        clip(base.a - GetCutOff(i.baseUV));
     #endif
 
     //Deal with surface attributes
@@ -93,11 +95,12 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
     surface.depth = -TransformWorldToView(i.positionWS).z;
     surface.color = base.rgb;
     surface.alpha = base.a;
+    surface.occlusion = GetOcclusiton(i.baseUV);
     // surface.metallic = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Metallic);
-    surface.metallic = GetMetallic(i.uv);
+    surface.metallic = GetMetallic(i.baseUV);
     // surface.smoothness = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Smoothness);
-    surface.smoothness = GetSmoothness(i.uv);
-    surface.fresnelStrength = GetFresnel(i.uv);
+    surface.smoothness = GetSmoothness(i.baseUV, i.detailUV);
+    surface.fresnelStrength = GetFresnel(i.baseUV);
     surface.dither = InterleavedGradientNoise(i.positionCS.xy, 0);//使用Core.hlsl中的函数来计算dither扰动采样位置
     //输入的第一个参数是SS的XY position，Fragment Shader中等效于CS的XY position；第二个参数用于控制其动画，不需要动画则直接使用0
 
@@ -112,7 +115,7 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
     BRDF brdf = GetBRDF(surface);
     #endif
     GI gi = GetGI(GI_FRAGMENT_DATA(i), surface, brdf);
-    color.rgb = GetLighting(surface, brdf, gi) + GetEmission(i.uv);
+    color.rgb = GetLighting(surface, brdf, gi) + GetEmission(i.baseUV);
     color.a = surface.alpha;
 
     return color;

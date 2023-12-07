@@ -1,6 +1,9 @@
 #ifndef CUSTOM_COMMON_INCLUDED
 #define CUSTOM_COMMON_INCLUDED
 
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Packing.hlsl"
+
 #if defined(_SHADOW_MASK_ALWAYS) || defined(_SHADOW_MASK_DISTANCE)
     #define SHADOWS_SHADOWMASK
 #endif
@@ -34,6 +37,15 @@ void ClipLOD(float2 positionCS, float fade)
         //由LOD n切换到LOD n+1时，LOD n+1区域的Fade Factor是负的
         //关于Fade Factor这一部分有点不理解，在两个LOD层级之间做可视化，似乎unity_LODFade.x的值是由一个LOD内0-1，下一个LOD内1-0，再下一个LOD内0-1这样变化的
         clip(fade + (fade < 0.0 ? dither : -dither));
+    #endif
+}
+
+float3 DecodeNormal(float4 sample, float scale)
+{
+    #if defined(UNITY_NO_DXT5nm)
+        return normalize(UnpackNormalRGB(sample, scale));
+    #else
+        return normalize(UnpackNormalmapRGorAG(sample, scale));
     #endif
 }
 

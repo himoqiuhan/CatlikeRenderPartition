@@ -61,7 +61,7 @@ float3 IndirectBRDF(Surface surface, BRDF brdf, float3 diffuse, float3 specular)
     //粗糙度影响Reflection强度，除以粗糙度的平方加一，使得高粗糙度不易显示反射，而低粗糙度会产生反射
     reflection /= brdf.roughness * brdf.roughness + 1.0;
     
-    return diffuse * brdf.diffuse + reflection;
+    return (diffuse * brdf.diffuse + reflection) * surface.occlusion;
 }
 
 #endif

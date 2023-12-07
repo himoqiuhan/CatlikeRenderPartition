@@ -56,7 +56,7 @@ float3 SampleLightMap(float2 lightMapUV)
     #endif
 }
 
-float SampleLightProbe(Surface surfaceWS)
+float3 SampleLightProbe(Surface surfaceWS)
 {
     #if defined(LIGHTMAP_ON)
         return 0.0;//如果对象使用了Lightmap，则不计算SH的light probe
