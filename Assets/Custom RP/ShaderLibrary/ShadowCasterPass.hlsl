@@ -57,10 +57,11 @@ void ShadowCasterPassFragmentProgram(Varyings i)
     // half4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
     // half4 mainTexColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
     // half4 base = baseColor * mainTexColor;
-    float4 base = GetBase(i.uv);
+    InputConfig config = GetInputConfig(i.uv);
+    float4 base = GetBase(config);
     #if defined(_SHADOWS_CLIP)
         // clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
-        clip(base.a - GetCutOff(i.uv));
+        clip(base.a - GetCutOff(config));
     #elif defined(_SHADOWS_DITHER)
         float dither = InterleavedGradientNoise(i.positionCS.xy, 0);
         clip(base.a - dither);

@@ -40,12 +40,13 @@ Varyings MetaPassVertexProgram(Attributes input)
 
 float4 MetaPassFragmentProgram(Varyings input) : SV_Target
 {
-    float4 base = GetBase(input.baseUV);
+    InputConfig config = GetInputConfig(input.baseUV);
+    float4 base = GetBase(config);
     Surface surface;
     ZERO_INITIALIZE(Surface, surface);//用0初始化surface的所有信息
     surface.color = base.rgb;
-    surface.metallic = GetMetallic(input.baseUV);
-    surface.smoothness = GetSmoothness(input.baseUV);
+    surface.metallic = GetMetallic(config);
+    surface.smoothness = GetSmoothness(config);
     BRDF brdf = GetBRDF(surface);
     float4 meta = 0.0;
     if(unity_MetaFragmentControl.x) // unity_MetaFragmentControl.x控制是否使用漫反射率
@@ -55,7 +56,7 @@ float4 MetaPassFragmentProgram(Varyings input) : SV_Target
     else if(unity_MetaFragmentControl.y) // unity_MetaFragmentControl控制是否返回自发光，但是自发光不会自动烘焙
         //需要到物体那边进行进一步的控制
     {
-        meta = float4(GetEmission(input.baseUV), 1.0);
+        meta = float4(GetEmission(config), 1.0);
     }
     meta.rgb += brdf.specular * brdf.roughness * 0.5;//Idea来自高度反光但是粗糙的物体同样会反射出一些间接光
     meta.rgb = min(PositivePow(meta.rgb, unity_OneOverOutputBoost), unity_MaxOutputValue);

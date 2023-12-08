@@ -2,11 +2,28 @@
 #define CUSTOM_COMMON_INCLUDED
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+// #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/SpaceTransforms.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Packing.hlsl"
 
 #if defined(_SHADOW_MASK_ALWAYS) || defined(_SHADOW_MASK_DISTANCE)
     #define SHADOWS_SHADOWMASK
 #endif
+
+
+real3x3 CustomCreateTangentToWorld(real3 normal, real3 tangent, real flipSign)
+{
+    // For odd-negative scale transforms we need to flip the sign
+    real sgn = flipSign; // Have Some Bugs
+    real3 bitangent = cross(normal, tangent) * sgn;
+
+    return real3x3(tangent, bitangent, normal);
+}
+
+real3 CustomTransformTangentToWorld(float3 dirTS, real3x3 tangentToWorld)
+{
+    // Note matrix is in row major convention with left multiplication as it is build on the fly
+    return mul(dirTS, tangentToWorld);
+}
 
 float InterleavedGradientNoiseForLOD(float2 pixCoord, int frameCount)
 {
@@ -47,6 +64,12 @@ float3 DecodeNormal(float4 sample, float scale)
     #else
         return normalize(UnpackNormalmapRGorAG(sample, scale));
     #endif
+}
+
+float3 NormalTangentToWorld(float3 normalTS, float3 normalWS, float4 tangentWS)
+{
+    float3x3 tangentToWorld = CustomCreateTangentToWorld(normalWS, tangentWS.xyz, tangentWS.w);
+    return CustomTransformTangentToWorld(normalTS, tangentToWorld);
 }
 
 #endif

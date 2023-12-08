@@ -35,10 +35,11 @@ Varyings BaseVertexProgram(Attributes vertexInput)
 half4 BaseFragmentProgram(Varyings i) : SV_Target
 {
     UNITY_SETUP_INSTANCE_ID(i);
-    float4 base = GetBase(i.uv);
+    InputConfig config = GetInputConfig(i.uv);
+    float4 base = GetBase(config);
             
     #if defined(_CLIPPING)
-    clip(base.a - GetCutOff(i.uv));
+    clip(base.a - GetCutOff(config));
     #endif
 
     return base;

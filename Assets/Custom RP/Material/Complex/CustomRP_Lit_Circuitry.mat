@@ -26,6 +26,10 @@ Material:
         m_Texture: {fileID: 2800000, guid: 011f7138b44808049bb18fb37a678f21, type: 3}
         m_Scale: {x: 8, y: 4}
         m_Offset: {x: 0, y: 0}
+    - _DetailNormalMap:
+        m_Texture: {fileID: 2800000, guid: 81eb22a05c4e89a4fb6b871005e1c487, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _EmissionMap:
         m_Texture: {fileID: 2800000, guid: 05518eef81dfacf4595b50ab40e0af38, type: 3}
         m_Scale: {x: 1, y: 1}
@@ -39,7 +43,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _NormalMap:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: 66dd310b2a66e2343b50d5fb727a9966, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
@@ -47,10 +51,14 @@ Material:
     - _Clipping: 0
     - _Cutoff: 0.5
     - _DetailAlbedo: 0.2
+    - _DetailMapToggle: 0
+    - _DetailNormalScale: 0.5
     - _DetailSmoothness: 0.2
     - _DstBlend: 0
     - _Fresnel: 1
+    - _MaskMapToggle: 0
     - _Metallic: 1
+    - _NormalMapToggle: 0
     - _NormalScale: 1
     - _Occlusion: 0.5
     - _PreMulAlpha: 0

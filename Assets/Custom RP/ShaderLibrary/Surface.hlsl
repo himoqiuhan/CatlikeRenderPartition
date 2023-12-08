@@ -5,6 +5,7 @@ struct Surface
 {
     float3 position;
     float3 normal;
+    float3 interpolatedNormal;
     float3 viewDirection;
     float depth;//maxDistance最大阴影距离是VS的深度，不是到相机的距离，所以我们需要在surface中加入一个depth信息
     float3 color;

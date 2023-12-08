@@ -5,6 +5,7 @@ Shader "CustomRP/Lit"
         _MainTex("Main Texture", 2D) = "white"{}
         _BaseColor("Color", Color) = (1.0, 1.0, 1.0, 1.0)
         _Cutoff("Alpha Cutoff", Range(0.0, 1.0)) = 0.5
+        [Toggle(_MASK_MAP)] _MaskMapToggle("Mask Map", Float) = 0.0
         [NoScaleOffset] _MaskMap("Mask (MODS)", 2D) = "white"{}
         //PBR
         _Metallic("Metallic", Range(0.0, 1.0)) = 0
@@ -13,6 +14,7 @@ Shader "CustomRP/Lit"
         _Fresnel("Fresnel", Range(0.0, 1.0)) = 1.0
         
         //Normal
+        [Toggle(_NORMAL_MAP)] _NormalMapToggle("Normal Map", Float) = 0
         [NoScaleOffset] _NormalMap("Normals", 2D) = "bump"{}
         _NormalScale("Normal Scale", Range(0.0, 1.0)) = 1.0
         
@@ -20,9 +22,13 @@ Shader "CustomRP/Lit"
         [NoScaleOffset]_EmissionMap("Emission", 2D) = "white"{}
         [HDR]_EmissionColor("Emission", Color) = (0.0, 0.0, 0.0, 0.0)
         
+        //Detail Map
+        [Toggle(_DETAIL_MAP)] _DetailMapToggle("Detail Maps", Float) = 0
         _DetailMap("Details", 2D) = "linearGrey"{}
+        [NoScaleOffset]_DetailNormalMap("Detail Normals", 2D) = "bump"{}
         _DetailAlbedo("Detail Albedo", Range(0.0, 1.0)) = 1.0
         _DetailSmoothness("Detial Smoothness", Range(0.0, 1.0)) = 1.0
+        _DetailNormalScale("Detial Normal Scale", Range(0.0, 1.0)) = 1.0
         
         //Settings
         [Toggle(_PREMULTIPLY_ALPHA)] _PreMulAlpha("Premultiply Alpha", Float) = 0
@@ -66,6 +72,9 @@ Shader "CustomRP/Lit"
             #pragma multi_compile _ LIGHTMAP_ON // Unity会对具有LIGHTMAP_ON关键字的shader变体进行Lightmap的渲染
             //Material Settings
             #pragma multi_compile_instancing
+            #pragma shader_feature _DETAIL_MAP
+            #pragma shader_feature _MASK_MAP
+            #pragma shader_feature _NORMAL_MAP
             #pragma shader_feature _CLIPPING
             #pragma shader_feature _PREMULTIPLY_ALPHA
             #pragma shader_feature _RECEIVE_SHADOWS

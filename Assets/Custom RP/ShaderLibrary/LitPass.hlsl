@@ -28,6 +28,7 @@ struct Attributes
     float4 positionOS : POSITION;
     float3 normalOS : NORMAL;
     float2 uv : TEXCOORD0;
+    float4 tangentOS : TANGENT;
     GI_ATTRIBUTE_DATA
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
@@ -37,6 +38,10 @@ struct Varyings
     float4 positionCS : SV_POSITION;
     float3 positionWS : VAR_PISITION;
     float3 normalWS : VAR_NORMAL;
+    //只需要在Varyings中处理宏开关，Attributes中没有被使用的属性会自动优化
+#if defined(_NORMAL_MAP)
+    float4 tangentWS : VAR_TANGENT;
+#endif
     float2 baseUV : VAR_MAIN_UV;
     float2 detailUV : VAR_DETAIL_UV;
     GI_VARYINGS_DATA
@@ -56,10 +61,16 @@ Varyings LitPassVertexProgram(Attributes input)
     VertexNormalInputs vertexNormalInputs = GetVertexNormalInputs(input.normalOS);
     //Only Normal Can Use if just input normalOS
     output.normalWS = vertexNormalInputs.normalWS;
+#if defined(_NORMAL_MAP)
+    output.tangentWS = float4(TransformObjectToWorldDir(input.tangentOS.xyz), input.tangentOS.w);
+#endif
     // float4 mainTexST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _MainTex_ST);
     // output.uv = input.uv * mainTexST.xy + mainTexST.zw;
     output.baseUV = TransformBaseUV(input.uv);
+#if defined(_DETAIL_MAP)
     output.detailUV = TransformDetailUV(input.uv);
+#endif
+
     return output;
 }
 
@@ -74,7 +85,17 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
     // half4 baseColor = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
     // half4 mainTexColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, i.uv);
     // half4 base = baseColor * mainTexColor;
-    float4 base = GetBase(i.baseUV, i.detailUV);
+    InputConfig config = GetInputConfig(i.baseUV, i.detailUV);
+#if defined(_MASK_MAP)
+    config.useMask = true;
+#endif
+    
+#if defined(_DETAIL_MAP)
+    config.detailUV = i.detailUV;
+    config.useDetail = true;
+#endif
+
+    float4 base = GetBase(config);
     // color.rgb = normalize(i.normalWS);
     //在进行线性插值时，每个片元得到的法线并不是等长的
     // color.rgb = abs(length(i.normalWS)-1.0) * 10.0;
@@ -84,23 +105,29 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
     //Deal with Clipping
     #if defined(_CLIPPING)
         // clip(base.a - UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff));
-        clip(base.a - GetCutOff(i.baseUV));
+        clip(base.a - GetCutOff(config));
     #endif
 
     //Deal with surface attributes
     Surface surface;
     surface.position = i.positionWS;
+#if defined(_NORMAL_MAP)
+    surface.normal = NormalTangentToWorld(GetNormalTS(config), i.normalWS, i.tangentWS);
+    surface.interpolatedNormal = i.normalWS;
+#else
     surface.normal = normalize(i.normalWS);
+    surface.interpolatedNormal = surface.normal;
+#endif
     surface.viewDirection = normalize(_WorldSpaceCameraPos - i.positionWS);
     surface.depth = -TransformWorldToView(i.positionWS).z;
     surface.color = base.rgb;
     surface.alpha = base.a;
-    surface.occlusion = GetOcclusiton(i.baseUV);
+    surface.occlusion = GetOcclusiton(config);
     // surface.metallic = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Metallic);
-    surface.metallic = GetMetallic(i.baseUV);
+    surface.metallic = GetMetallic(config);
     // surface.smoothness = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Smoothness);
-    surface.smoothness = GetSmoothness(i.baseUV, i.detailUV);
-    surface.fresnelStrength = GetFresnel(i.baseUV);
+    surface.smoothness = GetSmoothness(config);
+    surface.fresnelStrength = GetFresnel(config);
     surface.dither = InterleavedGradientNoise(i.positionCS.xy, 0);//使用Core.hlsl中的函数来计算dither扰动采样位置
     //输入的第一个参数是SS的XY position，Fragment Shader中等效于CS的XY position；第二个参数用于控制其动画，不需要动画则直接使用0
 
@@ -109,13 +136,13 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
     // return half4(gi.diffuse,1.0);
     
     float4 color;
-    #if defined(_PREMULTIPLY_ALPHA)
+#if defined(_PREMULTIPLY_ALPHA)
     BRDF brdf = GetBRDF(surface, true);
-    #else
+#else
     BRDF brdf = GetBRDF(surface);
-    #endif
+#endif
     GI gi = GetGI(GI_FRAGMENT_DATA(i), surface, brdf);
-    color.rgb = GetLighting(surface, brdf, gi) + GetEmission(i.baseUV);
+    color.rgb = GetLighting(surface, brdf, gi) + GetEmission(config);
     color.a = surface.alpha;
 
     return color;

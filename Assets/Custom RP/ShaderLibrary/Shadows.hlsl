@@ -94,7 +94,7 @@ float FilterDirectionalShadow(float3 positionSTS)
 float GetCascadedShadow(DirectionalShadowData directional, CustomShadowData global, Surface surfaceWS)
 {
     
-    float3 normalBias = surfaceWS.normal * (directional.normalBias * _CascadeData[global.cascadeIndex].y);//在世界空间下进行偏移，偏移的数值由CPU发送而来
+    float3 normalBias = surfaceWS.interpolatedNormal * (directional.normalBias * _CascadeData[global.cascadeIndex].y);//在世界空间下进行偏移，偏移的数值由CPU发送而来
     //normal bias的控制既有全局控制，又有逐个光源的控制
     float3 positionSTS = mul(_DirectionalShadowMatrices[directional.tileIndex], float4(surfaceWS.position + normalBias, 1.0)).xyz;
     // float shadow = SampleDirectionalShadowAtlas(positionSTS);
@@ -103,7 +103,7 @@ float GetCascadedShadow(DirectionalShadowData directional, CustomShadowData glob
     if(global.cascadeBlend < 1.0)
     {
         //计算当前像素点下一个cascade的阴影强度
-        normalBias = surfaceWS.normal * (directional.normalBias * _CascadeData[global.cascadeIndex + 1].y);
+        normalBias = surfaceWS.interpolatedNormal * (directional.normalBias * _CascadeData[global.cascadeIndex + 1].y);
         positionSTS = mul(_DirectionalShadowMatrices[directional.tileIndex + 1],
             float4(surfaceWS.position + normalBias, 1.0)
             ).xyz;

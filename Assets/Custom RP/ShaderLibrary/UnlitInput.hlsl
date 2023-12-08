@@ -11,35 +11,49 @@ UNITY_DEFINE_INSTANCED_PROP(half4, _BaseColor)
 UNITY_DEFINE_INSTANCED_PROP(float, _Cutoff)
 UNITY_INSTANCING_BUFFER_END(UnityPerMaterial)
 
+struct InputConfig
+{
+    float2 baseUV;
+    float2 detailUV;
+};
+
+InputConfig GetInputConfig(float2 baseUV, float2 detailUV = 0.0)
+{
+    InputConfig c;
+    c.baseUV = baseUV;
+    c.detailUV = detailUV;
+    return c;
+}
+
 float2 TransformBaseUV(float2 baseUV)
 {
     float4 baseST = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _MainTex_ST);
     return baseST.xy * baseUV + baseST.zw;
 }
 
-float4 GetBase(float2 baseUV)
+float4 GetBase(InputConfig c)
 {
-    float4 map = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, baseUV);
+    float4 map = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, c.baseUV);
     float4 color = UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _BaseColor);
     return map * color;
 }
 
-float GetCutOff(float2 baseUV)
+float GetCutOff(InputConfig c)
 {
     return UNITY_ACCESS_INSTANCED_PROP(UnityPerMaterial, _Cutoff);
 }
 
-float GetMetallic(float2 baseUV)
+float GetMetallic(InputConfig c)
 {
     return 0.0;
 }
 
-float GetSmoothness(float2 baseUV)
+float GetSmoothness(InputConfig c)
 {
     return 0.0;
 }
 
-float GetFresnel(float2 baseUV)
+float GetFresnel(InputConfig c)
 {
     return 0.0;
 }
