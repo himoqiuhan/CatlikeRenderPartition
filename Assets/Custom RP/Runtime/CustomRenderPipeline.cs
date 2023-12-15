@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 // using System.Collections.Generic;
 
-public class CustomRenderPipeline : RenderPipeline
+public partial class CustomRenderPipeline : RenderPipeline
 {
     private CameraRenderer renderer = new CameraRenderer();
     //自己创建的CameraRenderer，此处的CameraRenderer几乎等同于URP中的Scriptable Renderer
@@ -16,6 +16,7 @@ public class CustomRenderPipeline : RenderPipeline
         GraphicsSettings.useScriptableRenderPipelineBatching = useSRPBatcher;
         GraphicsSettings.lightsUseLinearIntensity = true;
         this.shadowSettings = shadowSettings;
+        InitializeForEditor();
     }
 
     protected override void
