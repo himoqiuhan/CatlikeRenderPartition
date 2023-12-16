@@ -15,6 +15,7 @@ float4 _OtherLightColors[MAX_OTHER_LIGHT_COUNT];
 float4 _OtherLightPositions[MAX_OTHER_LIGHT_COUNT];
 float4 _OtherLightDirections[MAX_OTHER_LIGHT_COUNT];
 float4 _OtherLightSpotAngles[MAX_OTHER_LIGHT_COUNT];
+float4 _OtherLightShadowData[MAX_OTHER_LIGHT_COUNT];
 CBUFFER_END
 
 struct Light
@@ -57,6 +58,14 @@ int GetOtherLightCount()
     return _OtherLightCount;
 }
 
+OtherShadowData GetOtherShadowData(int lightIndex)
+{
+    OtherShadowData data;
+    data.strength = _OtherLightShadowData[lightIndex].x;
+    data.shadowMaskChannel = _OtherLightShadowData[lightIndex].w;
+    return data;
+}
+
 Light GetOtherLight(int index, Surface surfaceWS, CustomShadowData shadowData)
 {
     Light light;
@@ -73,7 +82,12 @@ Light GetOtherLight(int index, Surface surfaceWS, CustomShadowData shadowData)
         saturate(dot(_OtherLightDirections[index].xyz, light.direction) *
         spotAngles.x + spotAngles.y)
         );
-    light.attenuation = spotAttenuation * rangeAttenuation / distanceSqr;
+    OtherShadowData otherShadowData = GetOtherShadowData(index);
+    light.attenuation =
+        //处理来自ShadowMaks的Light Attenuation
+        GetOtherShadowAttenuation(otherShadowData, shadowData, surfaceWS) *
+            //处理光源自身的Attenuation
+        spotAttenuation * rangeAttenuation / distanceSqr;
     return light;
 }
 

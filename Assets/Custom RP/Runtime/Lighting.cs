@@ -10,6 +10,8 @@ using Vector4 = UnityEngine.Vector4;
 
 public class Lighting
 {
+    private static string lightsPerObjectKeyword = "_LIGHTS_PER_OBJECT";
+    
     private const string bufferName = "Lighting";
 
     private CommandBuffer buffer = new CommandBuffer
@@ -34,26 +36,29 @@ public class Lighting
         otherLightCountId = Shader.PropertyToID("_OtherLightCount"),
         otherLightColorsId = Shader.PropertyToID("_OtherLightColors"),
         otherLightPositionsId = Shader.PropertyToID("_OtherLightPositions"),
-        //用于Spot Light的Dircection、Angle信息
+        //用于Spot Light的Direction、Angle信息
         otherLightDirectionsId = Shader.PropertyToID("_OtherLightDirections"),
-        otherLightSpotAnglesId = Shader.PropertyToID("_OtherLightSpotAngles");
+        otherLightSpotAnglesId = Shader.PropertyToID("_OtherLightSpotAngles"),
+        otherLightShadowDataId = Shader.PropertyToID("_OtherLightShadowData");
 
     private static Vector4[]
         otherLightColors = new Vector4[maxOtherLightCount],
         otherLightPositions = new Vector4[maxOtherLightCount],
         otherLightDirections = new Vector4[maxOtherLightCount],
-        otherLightSpotAngles = new Vector4[maxOtherLightCount];
+        otherLightSpotAngles = new Vector4[maxOtherLightCount],
+        otherLightShadowData = new Vector4[maxOtherLightCount];
             
     private CullingResults cullingResults;
 
     private Shadows shadows = new Shadows();
 
-    public void Setup(ScriptableRenderContext context, CullingResults cullingResults, ShadowSettings shadowSettings)
+    public void Setup(ScriptableRenderContext context, CullingResults cullingResults, 
+        ShadowSettings shadowSettings, bool useLightPerObject)
     {
         this.cullingResults = cullingResults;
         buffer.BeginSample(bufferName);
         shadows.Setup(context, cullingResults, shadowSettings);
-        SetupLights();
+        SetupLights(useLightPerObject);
         shadows.Render();
         buffer.EndSample(bufferName);
         context.ExecuteCommandBuffer(buffer);
@@ -79,6 +84,10 @@ public class Lighting
         otherLightPositions[index] = position;
         //确保Point Light不会被Angle影响
         otherLightSpotAngles[index] = new Vector4(0f, 1f);
+        
+        Light light = visibleLight.light;
+        //处理ShadowMask
+        otherLightShadowData[index] = shadows.ReserveOtherShadows(light, index);
     }
     
     void SetupSpotLight(int index, ref VisibleLight visibleLight)
@@ -94,15 +103,24 @@ public class Lighting
         float outerCos = Mathf.Cos(Mathf.Deg2Rad * 0.5f * visibleLight.spotAngle);
         float angleRangeInv = 1f / Mathf.Max(innerCos - outerCos, 0.001f);
         otherLightSpotAngles[index] = new Vector4(angleRangeInv, -outerCos * angleRangeInv);
+        //处理ShadowMask
+        otherLightShadowData[index] = shadows.ReserveOtherShadows(light, index);
     }
 
-    void SetupLights()
+    void SetupLights(bool useLightPerObject)
     {
+        //从CullingResults中获取Light Index Map，参数Allocator.Temp会返回一个临时的NativeArray<int>，其中的大小包含所有Light的Index（所有类型、以及不可见的光源）
+        NativeArray<int> indexMap = useLightPerObject ?
+            cullingResults.GetLightIndexMap(Allocator.Temp) : default;
         NativeArray<VisibleLight> visibleLights = cullingResults.visibleLights;
         //使用NativeLight获取所有可见的光源，NativeArray提供到Native Memory Buffer的连接，可以高效在C#代码和Unity Native代码之间分享数据
         int dirLightCount = 0, otherLightCount = 0;
-        for (int i = 0; i < visibleLights.Length; i++)//遍历所有可见光，依次设置数组和索引
+        
+        int i;
+        for (i = 0; i < visibleLights.Length; i++)//遍历所有可见光，依次设置数组和索引
         {
+            //需要对LightIndex进行进一步处理，实现对DirLight的剔除
+            int newIndex = -1;
             VisibleLight visibleLight = visibleLights[i];
             // if (visibleLight.lightType == LightType.Directional)//筛选Directional Light
             // {
@@ -123,16 +141,41 @@ public class Lighting
                 case LightType.Point:
                     if (otherLightCount < maxOtherLightCount)
                     {
+                        newIndex = otherLightCount;
                         SetupPointLight(otherLightCount++, ref visibleLight);
                     }
                     break;
                 case LightType.Spot:
                     if (otherLightCount < maxOtherLightCount)
                     {
+                        newIndex = otherLightCount;
                         SetupSpotLight(otherLightCount++, ref visibleLight);
                     }
                     break;
             }
+            
+            //如果是Point Light和Spot Light，设置对应的index；如果是Dir Light，设置index为-1
+            if (useLightPerObject)
+            {
+                indexMap[i] = newIndex;
+            }
+        }
+        
+        //同时设置所有不可见的光源
+        if (useLightPerObject)
+        {
+            for (; i < indexMap.Length; i++)
+            {
+                indexMap[i] = -1;
+            }
+            //将处理后的index传回unity
+            cullingResults.SetLightIndexMap(indexMap);
+            indexMap.Dispose();
+            Shader.EnableKeyword(lightsPerObjectKeyword);
+        }
+        else
+        {
+            Shader.DisableKeyword(lightsPerObjectKeyword);
         }
                 
         // Debug.Log("VisibleLightCount:" + visibleLights.Length);
@@ -155,6 +198,7 @@ public class Lighting
             buffer.SetGlobalVectorArray(otherLightPositionsId, otherLightPositions);
             buffer.SetGlobalVectorArray(otherLightDirectionsId, otherLightDirections);
             buffer.SetGlobalVectorArray(otherLightSpotAnglesId, otherLightSpotAngles);
+            buffer.SetGlobalVectorArray(otherLightShadowDataId, otherLightShadowData);
         }
 
 

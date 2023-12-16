@@ -26,7 +26,7 @@ public partial class CameraRenderer
     private Lighting lighting = new Lighting();
 
     public void Render(ScriptableRenderContext context, Camera camera, 
-        bool useDynamicBatching, bool useGPUInstancing,
+        bool useDynamicBatching, bool useGPUInstancing, bool useLightPerObject,
         ShadowSettings shadowSettings)
     {
         this.context = context;
@@ -43,12 +43,12 @@ public partial class CameraRenderer
         //lighting中除了设置光源外，还收阴影绘制。阴影绘制是一个独立的过程，需要在场景的主要渲染流程进行之前完成，以便于主渲染流程能够调用阴影渲染得到的阴影贴图
         buffer.BeginSample(SampleName);
         ExecuteBuffer();
-        lighting.Setup(this.context, cullingResults, shadowSettings);//应该在调用CameraRenderer.SetUp之前渲染阴影贴图
+        lighting.Setup(this.context, cullingResults, shadowSettings, useLightPerObject);//应该在调用CameraRenderer.SetUp之前渲染阴影贴图
         buffer.EndSample(SampleName);
 
         Setup(); //在渲染命令之前设置一些准备信息，例如摄像机的透视信息，摄像机的未知信息等->否则渲染出的SkyBox无法随着视角改变
 
-        DrawVisibleGeometry(useDynamicBatching, useGPUInstancing);
+        DrawVisibleGeometry(useDynamicBatching, useGPUInstancing, useLightPerObject);
         DrawUnsupportedShaders();
         DrawGizmos();
 
@@ -106,8 +106,12 @@ public partial class CameraRenderer
         return false;
     }
 
-    void DrawVisibleGeometry(bool useDynamicBatching, bool useGPUInstancing)
+    void DrawVisibleGeometry(bool useDynamicBatching, bool useGPUInstancing, bool useLightsPerObject)
     {
+        //Per-Object Light Data
+        PerObjectData lightsPerObjectFlags =
+            useLightsPerObject ? PerObjectData.LightData | PerObjectData.LightIndices : PerObjectData.None;
+            
         //SortingSettings描述渲染时对物体进行排序的方法
         //通常通过设置类成员criteria来进行排序的设置，常用的是SortingCriteria.CommonOpaque和SortingCriteria.CommonTransparent，
         //其余见文档 -- https://docs.unity3d.com/ScriptReference/Rendering.SortingCriteria.html
@@ -122,8 +126,8 @@ public partial class CameraRenderer
                 PerObjectData.Lightmaps | PerObjectData.ShadowMask | //告诉管线使用lightmap(/ShadowMask),用于获取并传输lightmap(/ShadowMask)的UV到shader中
                 PerObjectData.LightProbe |  PerObjectData.OcclusionProbe | //Light(/Occlusion) Probe的object
                 PerObjectData.LightProbeProxyVolume | //Light Probe Proxy Volume的object
-                PerObjectData.OcclusionProbeProxyVolume
-                                                                              
+                PerObjectData.OcclusionProbeProxyVolume |
+                lightsPerObjectFlags                                                              
         };
         //添加一个新的光照模型LightMode
         drawingSettings.SetShaderPassName(1, litShaderTagId);

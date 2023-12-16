@@ -64,7 +64,7 @@ public partial class CustomRenderPipeline
     partial void InitializeForEditor()
     {
         Lightmapping.SetDelegate(lightsDelegate);
-        Debug.Log("Reset Light Delegate");
+        // Debug.Log("Reset Light Delegate");
     }
 
     //在配置我们的管线时，调用Dispose来清除和设置委托：先调用基础实现，再执行ResetDelegate
@@ -72,7 +72,7 @@ public partial class CustomRenderPipeline
     {
         base.Dispose(disposing);
         Lightmapping.ResetDelegate();
-        Debug.Log("Reset Light Delegate From Dispose");
+        // Debug.Log("Reset Light Delegate From Dispose");
     }
     
 #endif

@@ -70,6 +70,7 @@ Shader "CustomRP/Lit"
             #pragma multi_compile _ _CASCADE_BLEND_SOFT _CASCADE_BLEND_DITHER
             #pragma multi_compile _ _SHADOW_MASK_ALWAYS _SHADOW_MASK_DISTANCE
             #pragma multi_compile _ LIGHTMAP_ON // Unity会对具有LIGHTMAP_ON关键字的shader变体进行Lightmap的渲染
+            #pragma multi_compile _ _LIGHTS_PER_OBJECT
             //Material Settings
             #pragma multi_compile_instancing
             #pragma shader_feature _DETAIL_MAP

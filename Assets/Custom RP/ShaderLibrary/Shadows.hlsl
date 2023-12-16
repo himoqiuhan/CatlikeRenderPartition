@@ -62,6 +62,13 @@ struct CustomShadowData
     CustomShadowMask shadowMask;//将ShadowMask作为字段添加到ShadowData中
 };
 
+//对Point Light和Spot Light的阴影支持
+struct OtherShadowData
+{
+    float strength;
+    int shadowMaskChannel;
+};
+
 float SampleDirectionalShadowAtlas(float3 positionSTS)
 {
     //STS指的是Shadow Tile Space，也就是光源看向场景的Clip Space
@@ -238,6 +245,22 @@ CustomShadowData GetShadowData (Surface surfaceWS)
     return data;
 }
 
+float GetOtherShadowAttenuation(OtherShadowData other, CustomShadowData global, Surface surfaceWS)
+{
+#if !defined(_RECEIVE_SHADOWS)
+    return 1.0;
+#endif
 
+    float shadow;
+    if(other.strength > 0.0)
+    {
+        shadow = GetBakedShadow(global.shadowMask, other.shadowMaskChannel, other.strength);
+    }
+    else
+    {
+        shadow = 1.0;
+    }
+    return shadow;
+}
 
 #endif
