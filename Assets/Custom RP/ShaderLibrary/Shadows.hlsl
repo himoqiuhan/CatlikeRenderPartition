@@ -245,6 +245,12 @@ CustomShadowData GetShadowData (Surface surfaceWS)
     return data;
 }
 
+float GetOtherShadow(OtherShadowData other, CustomShadowData global, Surface surfaceWS)
+{
+    return 1.0;
+}
+
+
 float GetOtherShadowAttenuation(OtherShadowData other, CustomShadowData global, Surface surfaceWS)
 {
 #if !defined(_RECEIVE_SHADOWS)
@@ -252,13 +258,15 @@ float GetOtherShadowAttenuation(OtherShadowData other, CustomShadowData global, 
 #endif
 
     float shadow;
-    if(other.strength > 0.0)
+    //同Directional Light一样区分处理Baked和Realtime Shadow
+    if(other.strength * global.strength <= 0.0)
     {
-        shadow = GetBakedShadow(global.shadowMask, other.shadowMaskChannel, other.strength);
+        shadow = GetBakedShadow(global.shadowMask, other.shadowMaskChannel, abs(other.strength));
     }
     else
     {
-        shadow = 1.0;
+        shadow = GetOtherShadow(other, global, surfaceWS);
+        shadow = MixBakedAndRealtimeShadows(global, shadow, other.shadowMaskChannel, other.strength);
     }
     return shadow;
 }

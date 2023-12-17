@@ -119,7 +119,7 @@ public class Shadows
                     visibleLightIndex, out Bounds b
                     ))
             {
-                //还是不太理解这里传入-的原因
+                //还是不太理解这里传入-的原因 ---- 进一步理解：如果光源不影响投射阴影的物体，传入负值在Shader中处理的结果是使用Baked Shadow Mask
                 return new Vector4(-light.shadowStrength, 0f, 0f, maskChannel);
             }
             
@@ -184,6 +184,19 @@ public class Shadows
         SetKeywords(shadowMaskKeywords, useShadowMask ? 
             QualitySettings.shadowmaskMode == ShadowmaskMode.Shadowmask ? 0 : 1 : 
             -1);
+        
+        //因为阴影的采样统一使用Cascade的数据，尽管Other Light没有cascade阴影，但是使用的是Cascade0作为shadowmap
+        //所以我们需要为Other Light指定Cascade0，并且为其指定distance fade value
+        buffer.SetGlobalInt(cascadeCountId,
+            ShadowedDirectionalLightCount > 0 ? settings.directional.cascadeCount : 0);
+        float f = 1f - settings.directional.cascadeFade;
+        buffer.SetGlobalVector(shadowDistanceFadeId,
+            new Vector4(
+                1f / settings.maxDistance, 1f / settings.distanceFade,
+                1f / (1f - f * f)
+                )
+            );
+        
         buffer.EndSample(bufferName);
         ExecuteBuffer();
     }
@@ -221,7 +234,7 @@ public class Shadows
 
         //在渲染完阴影之后将相关信息发送到GPU
         //发送Cascade相关信息
-        buffer.SetGlobalInt(cascadeCountId, settings.directional.cascadeCount);
+            // buffer.SetGlobalInt(cascadeCountId, settings.directional.cascadeCount); -- 数据发送迁移到整体Shadow数据发送内，用于处理Other Lights Shadow
         buffer.SetGlobalVectorArray(cascadeCullingSphereId, cascadeCullingSpheres);
         //发送Cascade的数据
         buffer.SetGlobalVectorArray(cascadeDataId, cascadeData);
@@ -229,12 +242,12 @@ public class Shadows
         buffer.SetGlobalMatrixArray(dirShadowMatricesId, dirShadowMatrices);
         //发送最大阴影距离给GPU
         // buffer.SetGlobalFloat(shadowDistanceId, settings.maxDistance);
-        float f = 1f - settings.directional.cascadeFade;
-        buffer.SetGlobalVector(shadowDistanceFadeId, new Vector4(1f / settings.maxDistance, 1f / settings.distanceFade,
-            1f / (1f - f * f)));
+            //float f = 1f - settings.directional.cascadeFade;
+            //buffer.SetGlobalVector(shadowDistanceFadeId, new Vector4(1f / settings.maxDistance, 1f / settings.distanceFade,
+                //1f / (1f - f * f)));  -- 数据发送迁移到整体Shadow数据发送内，用于处理Other Lights Shadow
         //maxDistance和distanceFade分别作为shadow fading计算中的m项和f项，都是在分母上的。因为是常量，所以在数据传输时直接传入其倒数，则只需要进行一次取倒数
         //可以优化逐Fragment的Shadow Fading计算中的求倒数
-        //第三个参数用于计算cascade shadow的衰减，为了保证球体的衰减率不变，f需要变为1 - （ 1 - f ）^2
+        //第三个参数用于计算cascade shadow的衰减，为了保证球体的衰减率不变，f需要变为1 - （ 1 - f ^2 ）
         SetKeywords(directionalFilterKeywords, (int)settings.directional.filter - 1); //设置阴影的filter mode
         SetKeywords(cascadeBlendKeywords, (int)settings.directional.cascadeBlend - 1); //设置cascade阴影的blend模式
         buffer.SetGlobalVector(shadowAtlasSizeId, new Vector4(atlasSize, 1f / atlasSize)); //传入Shadow Atlas的大小
