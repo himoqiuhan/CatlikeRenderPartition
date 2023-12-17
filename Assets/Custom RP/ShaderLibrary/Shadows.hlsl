@@ -225,7 +225,8 @@ CustomShadowData GetShadowData (Surface surfaceWS)
         }
     }
     //如果i=0，意味着当前片元在Cascade-4的范围之外，则不应该接收阴影
-    if (i == _CascadeCount)
+    //且CascadeCount>0，确保Other Light不使用cascade shadow的阴影强度不会被错误地设置为0
+    if (i == _CascadeCount && _CascadeCount > 0)
     {
         data.strength = 0.0;
     }

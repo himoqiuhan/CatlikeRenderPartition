@@ -19,7 +19,10 @@ public class Shadows
     private CullingResults cullingResults;
     private ShadowSettings settings;
 
-    private const int MaxShadowedDirectionalLightCount = 4, MaxCascades = 4;
+    private const int MaxShadowedDirectionalLightCount = 4, MaxShadowedOtherLightCount = 16;
+    private const int MaxCascades = 4;
+
+    private Vector4 atlasSizes;
 
     struct ShadowedDirectionalLight
     {
@@ -28,7 +31,7 @@ public class Shadows
         public float nearPlaneOffset;
     }
 
-    private int ShadowedDirectionalLightCount;
+    private int ShadowedDirectionalLightCount, ShadowedOtherLightCount;
 
     private ShadowedDirectionalLight[] ShadowedDirectionalLights =
         new ShadowedDirectionalLight[MaxShadowedDirectionalLightCount];
@@ -36,6 +39,8 @@ public class Shadows
     private static int
         dirShadowAtlasId = Shader.PropertyToID("_DirectionalShadowAtlas"),
         dirShadowMatricesId = Shader.PropertyToID("_DirectionalShadowMatrices"),
+        otherShadowAtlasId = Shader.PropertyToID("_OtherShadowAtlas"),
+        otherShadowMatricesId = Shader.PropertyToID("_OtherShadowMatrices"),
         cascadeCountId = Shader.PropertyToID("_CascadeCount"), //需要把Cascade的数量和Culling Sphere传递给GPU
         cascadeCullingSphereId = Shader.PropertyToID("_CascadeCullingSpheres"),
         cascadeDataId = Shader.PropertyToID("_CascadeData"),
@@ -49,7 +54,9 @@ public class Shadows
         cascadeCullingSpheres = new Vector4[MaxCascades], //Culling Sphere实际的存储方式是XYZ（位置）W（半径）
         cascadeData = new Vector4[MaxCascades];
 
-    private static Matrix4x4[] dirShadowMatrices = new Matrix4x4[MaxShadowedDirectionalLightCount * MaxCascades];
+    private static Matrix4x4[]
+        dirShadowMatrices = new Matrix4x4[MaxShadowedDirectionalLightCount * MaxCascades],
+        otherShadowMatrices = new Matrix4x4[MaxShadowedOtherLightCount];
 
     private static string[] directionalFilterKeywords =
     {
@@ -58,13 +65,20 @@ public class Shadows
         "_DIRECTIONAL_PCF7"
     };
 
+    private static string[] otherFilterKeywords =
+    {
+        "_OTHER_PCF3",
+        "_OTHER_PCF5",
+        "_OTHER_PCF7"
+    };
+
     private static string[] cascadeBlendKeywords =
     {
         "_CASCADE_BLEND_SOFT",
         "_CASCADE_BLEND_DITHER"
     };
 
-    static string[] shadowMaskKeywords = 
+    static string[] shadowMaskKeywords =
     {
         "_SHADOW_MASK_ALWAYS",
         "_SHADOW_MASK_DISTANCE"
@@ -77,8 +91,8 @@ public class Shadows
         this.context = context;
         this.cullingResults = cullingResults;
         this.settings = shadowSettings;
-        ShadowedDirectionalLightCount = 0;
-        useShadowMask = false;//每一帧设置时默认将useShadowMask设置为false
+        ShadowedDirectionalLightCount = ShadowedOtherLightCount = 0;
+        useShadowMask = false; //每一帧设置时默认将useShadowMask设置为false
     }
 
     void ExecuteBuffer()
@@ -93,11 +107,11 @@ public class Shadows
         //1.产生阴影的Directional Light数量限制
         //2.光源的阴影：shadows设置不为None、阴影强度大于零--光源本身的设置
         // XXX 3.光源不影响投射阴影的物体（被设置为这样，或是影响的物体距离超过了最大阴影距离，目前暂时只考虑了距离超出最大阴影距离的情况)--即光源对于实际的阴影渲染是否有效
-            //替换为不影响物体时换用Baked Shadowmask
+        //替换为不影响物体时换用Baked Shadowmask
         if (ShadowedDirectionalLightCount < MaxShadowedDirectionalLightCount &&
             light.shadows != LightShadows.None && light.shadowStrength > 0f //&&
             //cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b)
-            )
+           )
         {
             //maskChannel用于传递光源对应shadowmap所以用的通道
             float maskChannel = -1;
@@ -113,16 +127,16 @@ public class Shadows
                 //获取当前light的shadowmask所在通道
                 maskChannel = lightBaking.occlusionMaskChannel;
             }
-            
+
             //如果光源不影响投射阴影的物体，则直接返回light的shadowStrength
             if (!cullingResults.GetShadowCasterBounds(
                     visibleLightIndex, out Bounds b
-                    ))
+                ))
             {
                 //还是不太理解这里传入-的原因 ---- 进一步理解：如果光源不影响投射阴影的物体，传入负值在Shader中处理的结果是使用Baked Shadow Mask
                 return new Vector4(-light.shadowStrength, 0f, 0f, maskChannel);
             }
-            
+
             ShadowedDirectionalLights[ShadowedDirectionalLightCount] = new ShadowedDirectionalLight
             {
                 visibleLightIndex = visibleLightIndex,
@@ -135,29 +149,41 @@ public class Shadows
                 maskChannel);
         }
 
-        return new Vector4(0f,0f,0f,-1f);
+        return new Vector4(0f, 0f, 0f, -1f);
     }
-    
+
     //用于处理Other Light's Shadow Mask，实际上只用处理Shadow强度和对应光源所用的Shadow Mask的通道
     public Vector4 ReserveOtherShadows(Light light, int visibleLightIndex)
     {
-        if (light.shadows != LightShadows.None && light.shadowStrength > 0f)
+        //对于不使用ShadowMask，以及阴影强度小于0的光源，我们直接返回光源阴影的默认信息（不产生阴影影响）
+        if (light.shadows == LightShadows.None || light.shadowStrength <= 0f)
         {
-            LightBakingOutput lightBaking = light.bakingOutput;
-            if
-                (lightBaking.lightmapBakeType == LightmapBakeType.Mixed &&
-                 lightBaking.mixedLightingMode == MixedLightingMode.Shadowmask
-                )
-            {
-                useShadowMask = true;
-                return new Vector4(
-                    light.shadowStrength, 0f, 0f,
-                    lightBaking.occlusionMaskChannel
-                );
-            }
+            return new Vector4(0f, 0f, 0f, -1f);
         }
 
-        return new Vector4(0f, 0f, 0f, -1f);
+        float maskChannel = -1f;
+        LightBakingOutput lightBaking = light.bakingOutput;
+        if
+            (lightBaking.lightmapBakeType == LightmapBakeType.Mixed &&
+             lightBaking.mixedLightingMode == MixedLightingMode.Shadowmask
+            )
+        {
+            useShadowMask = true;
+            maskChannel = lightBaking.occlusionMaskChannel;
+        }
+
+        //如果visible list中产生实时阴影的other light数量超过了最大数量，或者光源出了裁剪空间，
+        //则返回用于shadow mask的相关信息，以便其处理baked shadow mask
+        if (ShadowedOtherLightCount >= MaxShadowedOtherLightCount ||
+            !cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b))
+        {
+            return new Vector4(-light.shadowStrength, 0f, 0f, maskChannel);
+        }
+
+        return new Vector4(
+            light.shadowStrength, ShadowedOtherLightCount++, 0f,
+            maskChannel
+        );
     }
 
     public void Render()
@@ -178,13 +204,24 @@ public class Shadows
             buffer.ClearRenderTarget(true, false, Color.clear);
             ExecuteBuffer();
         }
+
+        if (ShadowedOtherLightCount > 0)
+        {
+            RenderOtherShadows();
+        }
+        else
+        {
+            //如果没有Other Light使用阴影，我们需要一个dummy Texture来作为替代。
+            //可以像上面directional Light那样处理，也可以直接用dirShadowAtlas来替代
+            buffer.SetGlobalTexture(otherShadowAtlasId, dirShadowAtlasId);
+        }
+
         //在Render的最后设置Keywords，无论是否启用实时阴影都需要进行设置
         buffer.BeginSample(bufferName);
         //在QualitySetting中可以获取使用shadowmask的模式
-        SetKeywords(shadowMaskKeywords, useShadowMask ? 
-            QualitySettings.shadowmaskMode == ShadowmaskMode.Shadowmask ? 0 : 1 : 
-            -1);
-        
+        SetKeywords(shadowMaskKeywords,
+            useShadowMask ? QualitySettings.shadowmaskMode == ShadowmaskMode.Shadowmask ? 0 : 1 : -1);
+
         //因为阴影的采样统一使用Cascade的数据，尽管Other Light没有cascade阴影，但是使用的是Cascade0作为shadowmap
         //所以我们需要为Other Light指定Cascade0，并且为其指定distance fade value
         buffer.SetGlobalInt(cascadeCountId,
@@ -194,9 +231,11 @@ public class Shadows
             new Vector4(
                 1f / settings.maxDistance, 1f / settings.distanceFade,
                 1f / (1f - f * f)
-                )
-            );
-        
+            )
+        );
+        //统一传输AtlasSize的相关信息，xy是Directional Light的size信息，zw是Other Light的size信息
+        buffer.SetGlobalVector(shadowAtlasSizeId, atlasSizes);
+
         buffer.EndSample(bufferName);
         ExecuteBuffer();
     }
@@ -204,6 +243,8 @@ public class Shadows
     void RenderDirectionalShadows()
     {
         int atlasSize = (int)settings.directional.atlasSize;
+        atlasSizes.x = atlasSize;
+        atlasSizes.y = 1f / atlasSize;
         buffer.GetTemporaryRT(dirShadowAtlasId, atlasSize, atlasSize, 32, FilterMode.Bilinear,
             RenderTextureFormat.Shadowmap); //只用前三个参数，我们获得的是一张默认的ARGB贴图，但是因为我们创建的是ShadowMap，所以添加后三个参数：
         //第一个是depth buffer的精度，数值远大精度越高，这里使用32（通常有16、24、32），URP使用的是16
@@ -234,7 +275,7 @@ public class Shadows
 
         //在渲染完阴影之后将相关信息发送到GPU
         //发送Cascade相关信息
-            // buffer.SetGlobalInt(cascadeCountId, settings.directional.cascadeCount); -- 数据发送迁移到整体Shadow数据发送内，用于处理Other Lights Shadow
+        // buffer.SetGlobalInt(cascadeCountId, settings.directional.cascadeCount); -- 数据发送迁移到整体Shadow数据发送内，用于处理Other Lights Shadow
         buffer.SetGlobalVectorArray(cascadeCullingSphereId, cascadeCullingSpheres);
         //发送Cascade的数据
         buffer.SetGlobalVectorArray(cascadeDataId, cascadeData);
@@ -242,15 +283,46 @@ public class Shadows
         buffer.SetGlobalMatrixArray(dirShadowMatricesId, dirShadowMatrices);
         //发送最大阴影距离给GPU
         // buffer.SetGlobalFloat(shadowDistanceId, settings.maxDistance);
-            //float f = 1f - settings.directional.cascadeFade;
-            //buffer.SetGlobalVector(shadowDistanceFadeId, new Vector4(1f / settings.maxDistance, 1f / settings.distanceFade,
-                //1f / (1f - f * f)));  -- 数据发送迁移到整体Shadow数据发送内，用于处理Other Lights Shadow
+        //float f = 1f - settings.directional.cascadeFade;
+        //buffer.SetGlobalVector(shadowDistanceFadeId, new Vector4(1f / settings.maxDistance, 1f / settings.distanceFade,
+        //1f / (1f - f * f)));  -- 数据发送迁移到整体Shadow数据发送内，用于处理Other Lights Shadow
         //maxDistance和distanceFade分别作为shadow fading计算中的m项和f项，都是在分母上的。因为是常量，所以在数据传输时直接传入其倒数，则只需要进行一次取倒数
         //可以优化逐Fragment的Shadow Fading计算中的求倒数
         //第三个参数用于计算cascade shadow的衰减，为了保证球体的衰减率不变，f需要变为1 - （ 1 - f ^2 ）
         SetKeywords(directionalFilterKeywords, (int)settings.directional.filter - 1); //设置阴影的filter mode
         SetKeywords(cascadeBlendKeywords, (int)settings.directional.cascadeBlend - 1); //设置cascade阴影的blend模式
-        buffer.SetGlobalVector(shadowAtlasSizeId, new Vector4(atlasSize, 1f / atlasSize)); //传入Shadow Atlas的大小
+        //由Render函数进行Directional和Other Light的统一传递
+        // buffer.SetGlobalVector(shadowAtlasSizeId, new Vector4(atlasSize, 1f / atlasSize)); //传入Shadow Atlas的大小
+        buffer.EndSample(bufferName);
+        ExecuteBuffer();
+    }
+
+    void RenderOtherShadows()
+        //复制并更改RenderDirectionalShadows()函数
+    {
+        int atlasSize = (int)settings.other.atlasSize;
+        atlasSizes.z = atlasSize;
+        atlasSizes.w = 1f / atlasSize;
+        buffer.GetTemporaryRT(otherShadowAtlasId, atlasSize, atlasSize, 32, FilterMode.Bilinear,
+            RenderTextureFormat.Shadowmap); 
+        buffer.SetRenderTarget(otherShadowAtlasId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
+        buffer.ClearRenderTarget(true, false, Color.clear);
+
+        buffer.BeginSample(bufferName);
+        ExecuteBuffer();
+
+        int tiles = ShadowedOtherLightCount;
+        int split = tiles <= 1? 1 : tiles <= 4 ? 2 : 4; 
+        int tileSize = atlasSize / split;
+
+        for (int i = 0; i < ShadowedOtherLightCount; i++)
+        {
+            
+        }
+        
+        buffer.SetGlobalMatrixArray(otherShadowMatricesId, otherShadowMatrices);
+        SetKeywords(otherFilterKeywords, (int)settings.other.filter - 1); //设置阴影的filter mode
+        
         buffer.EndSample(bufferName);
         ExecuteBuffer();
     }
@@ -395,6 +467,10 @@ public class Shadows
         //回收创建的RT的内存
     {
         buffer.ReleaseTemporaryRT(dirShadowAtlasId);
+        if (ShadowedOtherLightCount > 0)
+        {
+            buffer.ReleaseTemporaryRT(otherShadowAtlasId);
+        };
         ExecuteBuffer();
     }
 }
