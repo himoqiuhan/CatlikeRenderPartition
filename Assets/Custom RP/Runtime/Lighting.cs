@@ -65,17 +65,17 @@ public class Lighting
         buffer.Clear();
     }
 
-    void SetupDirectionalLight(int index, ref VisibleLight visibleLight)//因为visibleLight数组很大，所以以引用的形式传递
+    void SetupDirectionalLight(int index, int visibleIndex, ref VisibleLight visibleLight)//因为visibleLight数组很大，所以以引用的形式传递
     {
         dirLightColors[index] = visibleLight.finalColor;//获得的是已经乘上了强度的光照颜色
         dirLightDirections[index] = -visibleLight.localToWorldMatrix.GetColumn(2);
-        dirLightShadowData[index] = shadows.ReserveDirectionalShadows(visibleLight.light, index);
+        dirLightShadowData[index] = shadows.ReserveDirectionalShadows(visibleLight.light, visibleIndex);
         // Light light = RenderSettings.sun;
         // buffer.SetGlobalVector(dirLightColorId, light.color.linear * light.intensity);
         // buffer.SetGlobalVector(dirLightDirectionId, -light.transform.forward);
     }
 
-    void SetupPointLight(int index, ref VisibleLight visibleLight)
+    void SetupPointLight(int index, int visibleIndex, ref VisibleLight visibleLight)
     {
         otherLightColors[index] = visibleLight.finalColor;
         //将Point Light的Range信息存储在position的w通道中
@@ -87,10 +87,10 @@ public class Lighting
         
         Light light = visibleLight.light;
         //处理ShadowMask
-        otherLightShadowData[index] = shadows.ReserveOtherShadows(light, index);
+        otherLightShadowData[index] = shadows.ReserveOtherShadows(light, visibleIndex);
     }
     
-    void SetupSpotLight(int index, ref VisibleLight visibleLight)
+    void SetupSpotLight(int index, int visibleIndex, ref VisibleLight visibleLight)
     {
         otherLightColors[index] = visibleLight.finalColor;
         Vector4 position = visibleLight.localToWorldMatrix.GetColumn(3);
@@ -104,7 +104,7 @@ public class Lighting
         float angleRangeInv = 1f / Mathf.Max(innerCos - outerCos, 0.001f);
         otherLightSpotAngles[index] = new Vector4(angleRangeInv, -outerCos * angleRangeInv);
         //处理ShadowMask
-        otherLightShadowData[index] = shadows.ReserveOtherShadows(light, index);
+        otherLightShadowData[index] = shadows.ReserveOtherShadows(light, visibleIndex);
     }
 
     void SetupLights(bool useLightPerObject)
@@ -119,7 +119,7 @@ public class Lighting
         int i;
         for (i = 0; i < visibleLights.Length; i++)//遍历所有可见光，依次设置数组和索引
         {
-            //需要对LightIndex进行进一步处理，实现对DirLight的剔除
+            //需要对LightIndex进行进一步处理，实现对DirLight的剔除 -- 用于PerObject Light
             int newIndex = -1;
             VisibleLight visibleLight = visibleLights[i];
             // if (visibleLight.lightType == LightType.Directional)//筛选Directional Light
@@ -135,21 +135,21 @@ public class Lighting
                 case LightType.Directional:
                     if (dirLightCount < maxDirLightCount)
                     {
-                        SetupDirectionalLight(dirLightCount++, ref visibleLight);
+                        SetupDirectionalLight(dirLightCount++, i, ref visibleLight);
                     }
                     break;
                 case LightType.Point:
                     if (otherLightCount < maxOtherLightCount)
                     {
                         newIndex = otherLightCount;
-                        SetupPointLight(otherLightCount++, ref visibleLight);
+                        SetupPointLight(otherLightCount++, i, ref visibleLight);
                     }
                     break;
                 case LightType.Spot:
                     if (otherLightCount < maxOtherLightCount)
                     {
                         newIndex = otherLightCount;
-                        SetupSpotLight(otherLightCount++, ref visibleLight);
+                        SetupSpotLight(otherLightCount++, i, ref visibleLight);
                     }
                     break;
             }
@@ -200,8 +200,6 @@ public class Lighting
             buffer.SetGlobalVectorArray(otherLightSpotAnglesId, otherLightSpotAngles);
             buffer.SetGlobalVectorArray(otherLightShadowDataId, otherLightShadowData);
         }
-
-
     }
 
     public void CleanUp()

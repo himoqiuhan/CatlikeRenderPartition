@@ -15,10 +15,23 @@
     #define DIRECTIONAL_FILTER_SETUP SampleShadow_ComputeSamples_Tent_7x7
 #endif
 
+#if defined(_OTHER_PCF3)
+    #define OTHER_FILTER_SAMPLES 4
+    #define OTHER_FILTER_SETUP SampleShadow_ComputeSamples_Tent_3x3
+#elif defined(_OTHER_PCF5)
+    #define OTHER_FILTER_SAMPLES 9
+    #define OTHER_FILTER_SETUP SampleShadow_ComputeSamples_Tent_5x5
+#elif defined(_OTHER_PCF7)
+    #define OTHER_FILTER_SAMPLES 16
+    #define OTHER_FILTER_SETUP SampleShadow_ComputeSamples_Tent_7x7
+#endif
+
 #define MAX_SHADOWED_DIRECTIONAL_LIGHT_COUNT 4
+#define MAX_SHADOWED_OTHER_LIGHT_COUNT 16
 #define MAX_CASCADE_COUNT 4
 
 TEXTURE2D_SHADOW(_DirectionalShadowAtlas);//使用TEXTURE_SHADOW宏来特殊声明，能够让代码更清晰（这一点在我们支持的平台上不会有影响，底层就是一个TEXTURE的宏定义转换）
+TEXTURE2D_SHADOW(_OtherShadowAtlas);
 #define SHADOW_SAMPLER sampler_linear_clamp_compare //compare为DX10新引入的宏，用作深度比较
 SAMPLER_CMP(SHADOW_SAMPLER);//使用SAMPLER_CMP宏对采样器状态进行设置，这个宏定义了一个不同的采样方法去采样shadow map，因为常规的双线性采样对深度数据来说没有意义
 //同时，我们可以显式定义一个更为准确的采样器状态，不需要unity基于贴图类型为我们推断出采样器状态：https://docs.unity.cn/2020.3/Documentation/Manual/SL-SamplerStates.html
@@ -31,6 +44,8 @@ CBUFFER_START(_CustomShadows)
 int _CascadeCount;
 float4 _CascadeCullingSpheres[MAX_CASCADE_COUNT];
 float4x4 _DirectionalShadowMatrices[MAX_SHADOWED_DIRECTIONAL_LIGHT_COUNT * MAX_CASCADE_COUNT];
+float4x4 _OtherShadowMatrices[MAX_SHADOWED_OTHER_LIGHT_COUNT];
+float4 _OtherShadowTiles[MAX_SHADOWED_OTHER_LIGHT_COUNT];
 float4 _CascadeData[MAX_CASCADE_COUNT];
 float4 _ShadowAtlasSize;
 float4 _ShadowDistanceFade;
@@ -66,7 +81,10 @@ struct CustomShadowData
 struct OtherShadowData
 {
     float strength;
+    int tileIndex;
     int shadowMaskChannel;
+    float3 lightPositionWS;
+    float3 spotDirectionWS;
 };
 
 float SampleDirectionalShadowAtlas(float3 positionSTS)
@@ -118,6 +136,35 @@ float GetCascadedShadow(DirectionalShadowData directional, CustomShadowData glob
         shadow = lerp(FilterDirectionalShadow(positionSTS), shadow, global.cascadeBlend);
     }
     return shadow;
+}
+
+float SampleOtherShadowAtlas(float3 positionSTS, float3 bounds)
+{
+    //bounds.z存储的scale信息是1/split，是UV空间下一个STS的边界长度
+    positionSTS.xy = clamp(positionSTS.xy, bounds.xy, bounds.xy + bounds.z);
+    //STS指的是Shadow Tile Space，也就是光源看向场景的Clip Space
+    return SAMPLE_TEXTURE2D_SHADOW(_OtherShadowAtlas, SHADOW_SAMPLER, positionSTS);
+    //对应特定采样器状态的SAMPLE_TEXTURE2D_SHADOW，如果在阴影中其返回0，如果不在阴影中则返回1
+};
+
+//通过这个函数来进行软阴影的最终控制，如果使用PCF2x2，则是直接采样一次贴图；如果是PCF3x3、PCF5x5、PCF7x7，则是采样4、9、16次
+float FilterOtherShadow(float3 positionSTS, float3 bounds)
+{
+#if defined(OTHER_FILTER_SETUP)
+    float weights[DIRECTIONAL_FILTER_SAMPLES];
+    float2 positions[DIRECTIONAL_FILTER_SAMPLES];
+    float4 size = _ShadowAtlasSize.wwzz;
+    OTHER_FILTER_SETUP(size, positionSTS.xy, weights, positions);//第一个参数为float4，XY是texel的size，ZW是整个texture的size
+    //weight为out的参数，输出一个权重数组；position为out的参数，输出一个UV空间的xy坐标数组
+    float shadow = 0;
+    for (int i = 0; i < OTHER_FILTER_SAMPLES; i++)
+    {
+        shadow += weights[i] * SampleOtherShadowAtlas(float3(positions[i].xy, positionSTS.z));//用得到的weight和position进行采样
+    }
+    return shadow;
+#else
+    return SampleOtherShadowAtlas(positionSTS, bounds);
+#endif
 }
 
 //Baked Shadow
@@ -248,9 +295,17 @@ CustomShadowData GetShadowData (Surface surfaceWS)
 
 float GetOtherShadow(OtherShadowData other, CustomShadowData global, Surface surfaceWS)
 {
-    return 1.0;
+    float4 tileData = _OtherShadowTiles[other.tileIndex];
+    float3 surfaceToLight = other.lightPositionWS - surfaceWS.position;//考虑spotlight方向，所以用反向的向量
+    float distanceToLightPlane = dot(surfaceToLight, other.spotDirectionWS);
+    //采样Other light的shadow map，同Directional Light的GetCascadeShadow类似
+    //不需要Cascade层级信息，但是因为Shadowmap时透视投影，所以用于采样的STS需要做透视除法
+    //STS的信息同Directional一样，在传入的矩阵Matrix中
+    float3 normalBias = surfaceWS.interpolatedNormal * (distanceToLightPlane * tileData.w);//乘上片元到light plane的距离，获得采样shadowmap时使用的准确的bias值
+    float4 positionSTS = mul(_OtherShadowMatrices[other.tileIndex],
+        float4(surfaceWS.position + normalBias, 1.0));
+    return FilterOtherShadow(positionSTS.xyz / positionSTS.w, tileData.xyz);
 }
-
 
 float GetOtherShadowAttenuation(OtherShadowData other, CustomShadowData global, Surface surfaceWS)
 {

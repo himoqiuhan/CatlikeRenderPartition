@@ -36,6 +36,18 @@ public class ShadowSettings
         public CascadeBlendMode cascadeBlend;
     }
     
+    public Directional directional = new Directional
+    {
+        atlasSize = MapSize._1024,
+        filter = FilterMode.PCF2x2,
+        cascadeCount = 4,
+        cascadeRatio1 = 0.1f,
+        cascadeRatio2 = 0.25f,
+        cascadeRatio3 = 0.5f,
+        cascadeFade = 0.1f,
+        cascadeBlend = Directional.CascadeBlendMode.Hard
+    };
+        
     [System.Serializable]
     public struct Other
     {
@@ -48,17 +60,4 @@ public class ShadowSettings
         atlasSize = MapSize._1024,
         filter = FilterMode.PCF2x2
     };
-
-    public Directional directional = new Directional
-    {
-        atlasSize = MapSize._1024,
-        filter = FilterMode.PCF2x2,
-        cascadeCount = 4,
-        cascadeRatio1 = 0.1f,
-        cascadeRatio2 = 0.25f,
-        cascadeRatio3 = 0.5f,
-        cascadeFade = 0.1f,
-        cascadeBlend = Directional.CascadeBlendMode.Hard
-    };
-    
 }

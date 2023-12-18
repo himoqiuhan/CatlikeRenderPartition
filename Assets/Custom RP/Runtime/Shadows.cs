@@ -30,29 +30,43 @@ public class Shadows
         public float slopeScaleBias;
         public float nearPlaneOffset;
     }
-
+    
+    struct ShadowedOtherLight
+    {
+        public int visibleLightIndex;
+        public float slopeScaleBias;
+        public float normalBias;
+    }
+    
     private int ShadowedDirectionalLightCount, ShadowedOtherLightCount;
 
     private ShadowedDirectionalLight[] ShadowedDirectionalLights =
         new ShadowedDirectionalLight[MaxShadowedDirectionalLightCount];
+
+    private ShadowedOtherLight[] shadowedOtherLights =
+        new ShadowedOtherLight[MaxShadowedOtherLightCount];
 
     private static int
         dirShadowAtlasId = Shader.PropertyToID("_DirectionalShadowAtlas"),
         dirShadowMatricesId = Shader.PropertyToID("_DirectionalShadowMatrices"),
         otherShadowAtlasId = Shader.PropertyToID("_OtherShadowAtlas"),
         otherShadowMatricesId = Shader.PropertyToID("_OtherShadowMatrices"),
+        otherShadowTilesId = Shader.PropertyToID("_OtherShadowTiles"),
         cascadeCountId = Shader.PropertyToID("_CascadeCount"), //需要把Cascade的数量和Culling Sphere传递给GPU
         cascadeCullingSphereId = Shader.PropertyToID("_CascadeCullingSpheres"),
         cascadeDataId = Shader.PropertyToID("_CascadeData"),
         shadowAtlasSizeId = Shader.PropertyToID("_ShadowAtlasSize"), //shadow atlas传入的大小，用于进行软阴影的采样（PCF Filter）
-        shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade"); //最后一个cascade culling的球体会略微超出我们定义的最大阴影，
-    //会带来那个片元通过了culling sphere的检测去进行贴图采样，但是最终计算出来的ShadowTile采样点超出应有的范围，
-    //意味着可能会采样到其他cascade shadow tile部分上（个人的理解），所以我们需要加一步限制最后一层cascade阴影的最大阴影距离限制。
-    //使用_ShadowDistanceFade去控制阴影的最大距离和阴影衰减
+        shadowDistanceFadeId = Shader.PropertyToID("_ShadowDistanceFade"), //最后一个cascade culling的球体会略微超出我们定义的最大阴影，
+        //会带来那个片元通过了culling sphere的检测去进行贴图采样，但是最终计算出来的ShadowTile采样点超出应有的范围，
+        //意味着可能会采样到其他cascade shadow tile部分上（个人的理解），所以我们需要加一步限制最后一层cascade阴影的最大阴影距离限制。
+        //使用_ShadowDistanceFade去控制阴影的最大距离和阴影衰减
+        shadowPancakingID = Shader.PropertyToID("_ShadowPancaking");//控制ShadowPancaking是否开启，对于Other Light需要关闭Pancaking
+        //因为Other Light绘制Shadowmap时是透视投影，clamping近平面顶点时会扰乱阴影的表现效果
 
-    private static Vector4[]
-        cascadeCullingSpheres = new Vector4[MaxCascades], //Culling Sphere实际的存储方式是XYZ（位置）W（半径）
-        cascadeData = new Vector4[MaxCascades];
+        private static Vector4[]
+            cascadeCullingSpheres = new Vector4[MaxCascades], //Culling Sphere实际的存储方式是XYZ（位置）W（半径）
+            cascadeData = new Vector4[MaxCascades],
+            otherShadowTiles = new Vector4[MaxShadowedOtherLightCount];
 
     private static Matrix4x4[]
         dirShadowMatrices = new Matrix4x4[MaxShadowedDirectionalLightCount * MaxCascades],
@@ -99,6 +113,20 @@ public class Shadows
     {
         context.ExecuteCommandBuffer(buffer);
         buffer.Clear();
+    }
+
+    void SetOtherTileData(int index, Vector2 offset, float scale, float bias)
+    {
+        float border = atlasSizes.w * 0.5f;
+        Vector4 data;
+        //Data.xy存储当前Tile Space的边缘
+        data.x = offset.x * scale + border;
+        data.y = offset.y * scale + border;
+        //Data.z存储缩放信息
+        data.z = scale - border - border;
+        //Data.w存储bias信息
+        data.w = bias;
+        otherShadowTiles[index] = data;
     }
 
     public Vector4 ReserveDirectionalShadows(Light light, int visibleLightIndex)
@@ -163,8 +191,8 @@ public class Shadows
 
         float maskChannel = -1f;
         LightBakingOutput lightBaking = light.bakingOutput;
-        if
-            (lightBaking.lightmapBakeType == LightmapBakeType.Mixed &&
+        if(
+            lightBaking.lightmapBakeType == LightmapBakeType.Mixed &&
              lightBaking.mixedLightingMode == MixedLightingMode.Shadowmask
             )
         {
@@ -179,6 +207,13 @@ public class Shadows
         {
             return new Vector4(-light.shadowStrength, 0f, 0f, maskChannel);
         }
+
+        shadowedOtherLights[ShadowedOtherLightCount] = new ShadowedOtherLight
+        {
+            visibleLightIndex = visibleLightIndex,
+            slopeScaleBias = light.shadowBias,
+            normalBias = light.shadowNormalBias
+        };
 
         return new Vector4(
             light.shadowStrength, ShadowedOtherLightCount++, 0f,
@@ -215,6 +250,8 @@ public class Shadows
             //可以像上面directional Light那样处理，也可以直接用dirShadowAtlas来替代
             buffer.SetGlobalTexture(otherShadowAtlasId, dirShadowAtlasId);
         }
+        
+        // Debug.Log("OtherShadowedLightCount: " + ShadowedOtherLightCount);
 
         //在Render的最后设置Keywords，无论是否启用实时阴影都需要进行设置
         buffer.BeginSample(bufferName);
@@ -254,7 +291,10 @@ public class Shadows
         buffer.SetRenderTarget(dirShadowAtlasId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
         //设置dirShadowAtlasId为下一次执行的RenderTarget，在当前Command Buffer被执行之后，原本的RenderTarget会自动恢复
         buffer.ClearRenderTarget(true, false, Color.clear); //清除当前的RenderTarget（也就是dirShadowAtlasId对应的RT）
-
+        
+        //设置Pancaking
+        buffer.SetGlobalFloat(shadowPancakingID, 1f);
+        
         buffer.BeginSample(bufferName);
         ExecuteBuffer();
 
@@ -307,6 +347,8 @@ public class Shadows
             RenderTextureFormat.Shadowmap); 
         buffer.SetRenderTarget(otherShadowAtlasId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
         buffer.ClearRenderTarget(true, false, Color.clear);
+        
+        buffer.SetGlobalFloat(shadowPancakingID, 0f);
 
         buffer.BeginSample(bufferName);
         ExecuteBuffer();
@@ -317,10 +359,12 @@ public class Shadows
 
         for (int i = 0; i < ShadowedOtherLightCount; i++)
         {
-            
+            RenderSpotShadows(i, split, tileSize);
         }
+        // Debug.Log("Shadowed Other Light Count: " + ShadowedOtherLightCount);
         
         buffer.SetGlobalMatrixArray(otherShadowMatricesId, otherShadowMatrices);
+        buffer.SetGlobalVectorArray(otherShadowTilesId, otherShadowTiles);
         SetKeywords(otherFilterKeywords, (int)settings.other.filter - 1); //设置阴影的filter mode
         
         buffer.EndSample(bufferName);
@@ -340,6 +384,8 @@ public class Shadows
         //   L3C0, L3C1, L3C2, L3C3 )
         //用这个就很好理解计算ShadowMatrices函数中的i、cascadeCount参数，以及tileIndex所表示的行索引的作用
         Vector3 ratios = settings.directional.CascadeRatios;
+
+        float tileScale = 1f / split;
 
         float cullingFactor =
             Mathf.Max(0f, 0.8f - settings.directional.cascadeFade); //使用0.8控制是为了减小对处于cascade交界处shadow caster的影响
@@ -382,7 +428,7 @@ public class Shadows
                 ConvertToAtlasMatrix(
                     projectionMatrix * viewMatrix,
                     SetTileViewport(tileIndex, split, tileSize),
-                    split); //获得从世界空间到光源裁剪空间的变化矩阵（矩阵相乘是左乘）,同时把矩阵转换为运用了Atlas多组Shadowmap的形态，并在内部调用SetTileViewport函数，既实现Tile的buffer设置，又获得了offset的返回值
+                    tileScale); //获得从世界空间到光源裁剪空间的变化矩阵（矩阵相乘是左乘）,同时把矩阵转换为运用了Atlas多组Shadowmap的形态，并在内部调用SetTileViewport函数，既实现Tile的buffer设置，又获得了offset的返回值
             buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
             // buffer.SetGlobalDepthBias(0f, 3f); -- Depth Bias会造成Perter-Panning的Artifact；使用Slope Bias能获得还算不错的效果，但是不够直观
             buffer.SetGlobalDepthBias(0f, light.slopeScaleBias); //此处的Slope Bias是逐光源设置的，用于解决阴影采样溢出，导致不同物体间接缝初产生异样阴影的问题
@@ -391,6 +437,32 @@ public class Shadows
             // buffer.SetGlobalDepthBias(0f, 0f);
             buffer.SetGlobalDepthBias(0f, 0f);
         }
+    }
+
+    void RenderSpotShadows(int index, int split, int tileSize)
+    {
+        ShadowedOtherLight light = shadowedOtherLights[index];
+        var shadowSettings = new ShadowDrawingSettings(
+            cullingResults, light.visibleLightIndex
+        );
+        cullingResults.ComputeSpotShadowMatricesAndCullingPrimitives(
+            light.visibleLightIndex, out Matrix4x4 viewMatrix,
+            out Matrix4x4 projectionMatrix, out ShadowSplitData splitData);
+        shadowSettings.splitData = splitData;
+        //处理Shadow Bias: 因为other light的shadowmap是透视投影获得的，运用到实际采样时使用的texelSize需要基于透视进行进一步三角函数处理
+        float texelSize = 2f / (tileSize * projectionMatrix.m00);
+        float filterSize = texelSize * ((float)settings.other.filter + 1f);
+        float bias = light.normalBias * filterSize * 1.4142136f;
+        Vector2 offset = SetTileViewport(index, split, tileSize);
+        float tileScale = 1f / split;
+        SetOtherTileData(index, offset, tileScale, bias);
+        otherShadowMatrices[index] = ConvertToAtlasMatrix(
+            projectionMatrix * viewMatrix, offset, tileScale);
+        buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
+        buffer.SetGlobalDepthBias(0f, light.slopeScaleBias);
+        ExecuteBuffer();
+        context.DrawShadows(ref shadowSettings);
+        buffer.SetGlobalDepthBias(0f, 0f);
     }
 
     void SetCascadeData(int index, Vector4 cullingSphere, float tileSize)
@@ -418,7 +490,7 @@ public class Shadows
         return offset;
     }
 
-    Matrix4x4 ConvertToAtlasMatrix(Matrix4x4 m, Vector2 offset, int split)
+    Matrix4x4 ConvertToAtlasMatrix(Matrix4x4 m, Vector2 offset, float scale)
     {
         if (SystemInfo.usesReversedZBuffer) //适配不同图形API对深度的存储方法，（为了准确性，一般将近处存为1，远处存为0；但OpenGL是反过来的）
         {
@@ -431,7 +503,7 @@ public class Shadows
         //Clip Space下的深度信息是存储在-1~1之间的，需要缩放到0~1之间
         //并且需要基于Atlas进行调整
         //手动设置矩阵，避免因矩阵相乘而得到的一些0值和无必要的操作
-        float scale = 1f / split;
+        // float scale = 1f / split;
         m.m00 = (0.5f * (m.m00 + m.m30) + offset.x * m.m30) * scale;
         m.m01 = (0.5f * (m.m01 + m.m31) + offset.x * m.m31) * scale;
         m.m02 = (0.5f * (m.m02 + m.m32) + offset.x * m.m32) * scale;

@@ -62,7 +62,10 @@ OtherShadowData GetOtherShadowData(int lightIndex)
 {
     OtherShadowData data;
     data.strength = _OtherLightShadowData[lightIndex].x;
+    data.tileIndex = _OtherLightShadowData[lightIndex].y;
     data.shadowMaskChannel = _OtherLightShadowData[lightIndex].w;
+    data.lightPositionWS = 0.0;
+    data.spotDirectionWS = 0.0;
     return data;
 }
 
@@ -70,7 +73,8 @@ Light GetOtherLight(int index, Surface surfaceWS, CustomShadowData shadowData)
 {
     Light light;
     light.color = _OtherLightColors[index].rgb;
-    float3 ray = _OtherLightPositions[index].xyz - surfaceWS.position;
+    float3 position = _OtherLightPositions[index].xyz;
+    float3 ray = position - surfaceWS.position;
     light.direction = normalize(ray);
     //计算距离衰减
     float distanceSqr = max(dot(ray, ray), 0.00001);
@@ -78,11 +82,14 @@ Light GetOtherLight(int index, Surface surfaceWS, CustomShadowData shadowData)
         saturate(1.0 - Square(distanceSqr * _OtherLightPositions[index].w))
     );
     float4 spotAngles = _OtherLightSpotAngles[index];
+    float3 spotDirection = _OtherLightDirections[index];
     float spotAttenuation = Square(
-        saturate(dot(_OtherLightDirections[index].xyz, light.direction) *
+        saturate(dot(spotDirection.xyz, light.direction) *
         spotAngles.x + spotAngles.y)
         );
     OtherShadowData otherShadowData = GetOtherShadowData(index);
+    otherShadowData.lightPositionWS = position;
+    otherShadowData.spotDirectionWS = spotDirection;
     light.attenuation =
         //处理来自ShadowMaks的Light Attenuation
         GetOtherShadowAttenuation(otherShadowData, shadowData, surfaceWS) *
