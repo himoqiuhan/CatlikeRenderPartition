@@ -82,8 +82,10 @@ struct OtherShadowData
 {
     float strength;
     int tileIndex;
+    bool isPoint;//处理Point Light
     int shadowMaskChannel;
     float3 lightPositionWS;
+    float3 lightDirectionWS;//用于处理Point Light的六个面的情况
     float3 spotDirectionWS;
 };
 
@@ -293,16 +295,34 @@ CustomShadowData GetShadowData (Surface surfaceWS)
     return data;
 }
 
+static const float3 pointShadowPlanes[6] = {
+    float3(-1.0,  0.0,  0.0),
+    float3( 1.0,  0.0,  0.0),
+    float3( 0.0, -1.0,  0.0),
+    float3( 0.0,  1.0,  0.0),
+    float3( 0.0,  0.0, -1.0),
+    float3( 0.0,  0.0,  1.0)
+};
+
 float GetOtherShadow(OtherShadowData other, CustomShadowData global, Surface surfaceWS)
 {
-    float4 tileData = _OtherShadowTiles[other.tileIndex];
+    float tileIndex = other.tileIndex;
+    float3 lightPlane = other.spotDirectionWS;
+    if (other.isPoint)
+    {
+        //使用Core RP Library -- Common.hlsl中的函数来获取Cubemap的顺序，即+X,-X,+Y,-Y,+Z,-Z
+        float faceOffset = CubeMapFaceID(-other.lightDirectionWS);
+        tileIndex += faceOffset;
+        lightPlane = pointShadowPlanes[faceOffset];
+    }
+    float4 tileData = _OtherShadowTiles[tileIndex];
     float3 surfaceToLight = other.lightPositionWS - surfaceWS.position;//考虑spotlight方向，所以用反向的向量
-    float distanceToLightPlane = dot(surfaceToLight, other.spotDirectionWS);
+    float distanceToLightPlane = dot(surfaceToLight, lightPlane);
     //采样Other light的shadow map，同Directional Light的GetCascadeShadow类似
     //不需要Cascade层级信息，但是因为Shadowmap时透视投影，所以用于采样的STS需要做透视除法
     //STS的信息同Directional一样，在传入的矩阵Matrix中
     float3 normalBias = surfaceWS.interpolatedNormal * (distanceToLightPlane * tileData.w);//乘上片元到light plane的距离，获得采样shadowmap时使用的准确的bias值
-    float4 positionSTS = mul(_OtherShadowMatrices[other.tileIndex],
+    float4 positionSTS = mul(_OtherShadowMatrices[tileIndex],
         float4(surfaceWS.position + normalBias, 1.0));
     return FilterOtherShadow(positionSTS.xyz / positionSTS.w, tileData.xyz);
 }

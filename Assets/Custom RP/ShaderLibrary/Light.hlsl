@@ -63,8 +63,10 @@ OtherShadowData GetOtherShadowData(int lightIndex)
     OtherShadowData data;
     data.strength = _OtherLightShadowData[lightIndex].x;
     data.tileIndex = _OtherLightShadowData[lightIndex].y;
+    data.isPoint = _OtherLightShadowData[lightIndex].z == 1.0;
     data.shadowMaskChannel = _OtherLightShadowData[lightIndex].w;
     data.lightPositionWS = 0.0;
+    data.lightDirectionWS = 0.0;
     data.spotDirectionWS = 0.0;
     return data;
 }
@@ -89,6 +91,7 @@ Light GetOtherLight(int index, Surface surfaceWS, CustomShadowData shadowData)
         );
     OtherShadowData otherShadowData = GetOtherShadowData(index);
     otherShadowData.lightPositionWS = position;
+    otherShadowData.lightDirectionWS = light.direction;
     otherShadowData.spotDirectionWS = spotDirection;
     light.attenuation =
         //处理来自ShadowMaks的Light Attenuation

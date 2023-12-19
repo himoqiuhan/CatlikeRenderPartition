@@ -1,4 +1,5 @@
 using System.Numerics;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Matrix4x4 = UnityEngine.Matrix4x4;
@@ -36,6 +37,7 @@ public class Shadows
         public int visibleLightIndex;
         public float slopeScaleBias;
         public float normalBias;
+        public bool isPoint;
     }
     
     private int ShadowedDirectionalLightCount, ShadowedOtherLightCount;
@@ -183,6 +185,7 @@ public class Shadows
     //用于处理Other Light's Shadow Mask，实际上只用处理Shadow强度和对应光源所用的Shadow Mask的通道
     public Vector4 ReserveOtherShadows(Light light, int visibleLightIndex)
     {
+        // Debug.Log("Light Type Is: " + light.type);
         //对于不使用ShadowMask，以及阴影强度小于0的光源，我们直接返回光源阴影的默认信息（不产生阴影影响）
         if (light.shadows == LightShadows.None || light.shadowStrength <= 0f)
         {
@@ -199,10 +202,16 @@ public class Shadows
             useShadowMask = true;
             maskChannel = lightBaking.occlusionMaskChannel;
         }
+        
+        //处理实时点光源阴影：一个点光源如果要生成实时阴影需要动用6个Tile来渲染一个Cubemap
+        bool isPoint = light.type == LightType.Point;
+        int newLightCount = ShadowedOtherLightCount + (isPoint ? 6 : 1);
+        // Debug.Log("IS Point Light: " + isPoint);
 
         //如果visible list中产生实时阴影的other light数量超过了最大数量，或者光源出了裁剪空间，
         //则返回用于shadow mask的相关信息，以便其处理baked shadow mask
-        if (ShadowedOtherLightCount >= MaxShadowedOtherLightCount ||
+        //if (ShadowedOtherLightCount >= MaxShadowedOtherLightCount ||
+        if (newLightCount >= MaxShadowedOtherLightCount ||
             !cullingResults.GetShadowCasterBounds(visibleLightIndex, out Bounds b))
         {
             return new Vector4(-light.shadowStrength, 0f, 0f, maskChannel);
@@ -212,13 +221,16 @@ public class Shadows
         {
             visibleLightIndex = visibleLightIndex,
             slopeScaleBias = light.shadowBias,
-            normalBias = light.shadowNormalBias
+            normalBias = light.shadowNormalBias,
+            isPoint = isPoint
         };
 
-        return new Vector4(
-            light.shadowStrength, ShadowedOtherLightCount++, 0f,
+        Vector4 data = new Vector4(
+            light.shadowStrength, ShadowedOtherLightCount, isPoint ? 1f : 0f,
             maskChannel
         );
+        ShadowedOtherLightCount = newLightCount;
+        return data;
     }
 
     public void Render()
@@ -357,9 +369,19 @@ public class Shadows
         int split = tiles <= 1? 1 : tiles <= 4 ? 2 : 4; 
         int tileSize = atlasSize / split;
 
-        for (int i = 0; i < ShadowedOtherLightCount; i++)
+        for (int i = 0; i < ShadowedOtherLightCount;)
         {
-            RenderSpotShadows(i, split, tileSize);
+            //分别处理i的递增值
+            if (shadowedOtherLights[i].isPoint)
+            {
+                RenderPointShadows(i, split, tileSize);
+                i += 6;
+            }
+            else
+            {
+                RenderSpotShadows(i, split, tileSize);
+                i += 1;
+            }
         }
         // Debug.Log("Shadowed Other Light Count: " + ShadowedOtherLightCount);
         
@@ -463,6 +485,60 @@ public class Shadows
         ExecuteBuffer();
         context.DrawShadows(ref shadowSettings);
         buffer.SetGlobalDepthBias(0f, 0f);
+    }
+    //与RenderSpotShadows有两点不同之处：
+    //1.需要遍历6次，分别渲染cubemap的每个面
+    //2.使用 ComputePointShadowMatricesAndCullingPrimitives 函数，多两个参数，CubemapFace Index和Fov bias
+    void RenderPointShadows(int index, int split, int tileSize)
+    {
+        ShadowedOtherLight light = shadowedOtherLights[index];
+        var shadowSettings = new ShadowDrawingSettings(
+            cullingResults, light.visibleLightIndex
+        );
+        
+        //因为Cubemap的FOV通常是90°，因此世界空间下的Tile Size为texelSize的两倍。可以将重复的计算移除循环
+        float texelSize = 2f / tileSize;
+        float filterSize = texelSize * ((float)settings.other.filter + 1f);
+        float bias = light.normalBias * filterSize * 1.4142136f;
+        float tileScale = 1f / split;
+        
+        //在渲染point light的阴影时，不同面片之间如果相差角度过大，会造成面之间部分的阴影拉伸（例如90°的墙角）
+        //Cubemap对于此的解决是在不同的Face之间做采样插值，但是这里我们只是使用了Cubemap的思想，而非真正意义上的使用Cubemap，对于每一个Fragment我们只是采样一个Tile
+        //所以无法直接解决这个问题。因为没有阴影衰减，Spot Light也会有同样的问题。
+        //对于Point Light可以使用fovBias来处理，其原理是渲染shadowmap时适当增加world-space的tile size，使得我们永远不会采样到一个tile的边缘
+        float fovBias = Mathf.Atan(1f + bias + filterSize) * Mathf.Rad2Deg * 2f - 90f;
+        //这个处理方法并不完美，因为tilesize一旦改变，就需要fovBias进一步增加。不过差异在不使用large normal bias + small atlas size时不会太明显。
+        //对于spot light可以使用同样的原理，但是因为spotlight的函数中没有fovBias的处理，需要自己改相应的数据，写自己的函数变体（但是原函数闭源）
+        
+        for (int i = 0; i < 6; i++)
+        {
+            cullingResults.ComputePointShadowMatricesAndCullingPrimitives(
+                light.visibleLightIndex, (CubemapFace)i,  fovBias,
+                out Matrix4x4 viewMatrix,
+                out Matrix4x4 projectionMatrix, out ShadowSplitData splitData);
+            //造成漏光的原因：Unity在渲染Point Light的Shadow map时，会将阴影上下反转进行绘制，使得三角形的组成顺序被反转
+            //造成的结果是物体相对于光源的背面被渲染(Back-face shadow)，但通常情况渲染Shadowmap是渲染相对于光源的正面的深度（Front-face shadow）
+            //Back-face shadow这样可以避免大多数的acne（因为渲染的是物体的背面，相当于在渲染shadowmap时就进行了bias，但是会造成物体与阴影的接触面漏光的问题
+            //通过反转viewMatrix的第二行可以反转渲染（上下颠倒回来）（因为这一行的第一列是0，所以不需要反转）
+            viewMatrix.m11 = -viewMatrix.m11;
+            viewMatrix.m12 = -viewMatrix.m12;
+            viewMatrix.m13 = -viewMatrix.m13;
+            //然后再调整光源的Normal Bias来减少acne
+            //不过当物体Mesh Renderer-Lighting-Cast Shadows被设置为Two Side时，不管是否反转，得到的结果都是一样的（因为在渲染shadowmap时物体的两个面都被渲染了）
+            
+            shadowSettings.splitData = splitData;
+            int tileIndex = index + i;//获取当前CubemapFace在Shadow Tiles中的Index
+            Vector2 offset = SetTileViewport(tileIndex, split, tileSize);
+            SetOtherTileData(tileIndex, offset, tileScale, bias);
+            otherShadowMatrices[tileIndex] = ConvertToAtlasMatrix(
+                projectionMatrix * viewMatrix, offset, tileScale);
+            buffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
+            buffer.SetGlobalDepthBias(0f, light.slopeScaleBias);
+            ExecuteBuffer();
+            context.DrawShadows(ref shadowSettings);
+            buffer.SetGlobalDepthBias(0f, 0f);
+        }
+        // Debug.Log("Render Point Shadows");
     }
 
     void SetCascadeData(int index, Vector4 cullingSphere, float tileSize)
