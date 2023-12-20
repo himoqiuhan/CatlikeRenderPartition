@@ -502,9 +502,9 @@ public class Shadows
         float bias = light.normalBias * filterSize * 1.4142136f;
         float tileScale = 1f / split;
         
-        //在渲染point light的阴影时，不同面片之间如果相差角度过大，会造成面之间部分的阴影拉伸（例如90°的墙角）
+        //在渲染point light的阴影时，不同面片之间如果相差角度过大，会造成面之间部分的阴影不连续（例如90°的墙角）
         //Cubemap对于此的解决是在不同的Face之间做采样插值，但是这里我们只是使用了Cubemap的思想，而非真正意义上的使用Cubemap，对于每一个Fragment我们只是采样一个Tile
-        //所以无法直接解决这个问题。因为没有阴影衰减，Spot Light也会有同样的问题。
+        //所以无法直接解决这个问题。因为没有采样衰减，Spot Light也会有同样的问题。
         //对于Point Light可以使用fovBias来处理，其原理是渲染shadowmap时适当增加world-space的tile size，使得我们永远不会采样到一个tile的边缘
         float fovBias = Mathf.Atan(1f + bias + filterSize) * Mathf.Rad2Deg * 2f - 90f;
         //这个处理方法并不完美，因为tilesize一旦改变，就需要fovBias进一步增加。不过差异在不使用large normal bias + small atlas size时不会太明显。
@@ -518,7 +518,7 @@ public class Shadows
                 out Matrix4x4 projectionMatrix, out ShadowSplitData splitData);
             //造成漏光的原因：Unity在渲染Point Light的Shadow map时，会将阴影上下反转进行绘制，使得三角形的组成顺序被反转
             //造成的结果是物体相对于光源的背面被渲染(Back-face shadow)，但通常情况渲染Shadowmap是渲染相对于光源的正面的深度（Front-face shadow）
-            //Back-face shadow这样可以避免大多数的acne（因为渲染的是物体的背面，相当于在渲染shadowmap时就进行了bias，但是会造成物体与阴影的接触面漏光的问题
+            //Back-face shadow这样可以避免大多数的acne（因为渲染的是物体的背面，相当于在渲染shadowmap时就进行了bias），但是会造成物体与阴影的接触面漏光的问题
             //通过反转viewMatrix的第二行可以反转渲染（上下颠倒回来）（因为这一行的第一列是0，所以不需要反转）
             viewMatrix.m11 = -viewMatrix.m11;
             viewMatrix.m12 = -viewMatrix.m12;

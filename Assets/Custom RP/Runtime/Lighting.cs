@@ -202,7 +202,7 @@ public class Lighting
         }
     }
 
-    public void CleanUp()
+    public void Cleanup()
     {
         //由lighting来调用，在Renderer中统一执行有关lighting的清除
         shadows.CleanUp();

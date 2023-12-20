@@ -22,12 +22,17 @@ public partial class CameraRenderer
     private static ShaderTagId unlitShaderTagId = new ShaderTagId("SRPUnlit"),
         litShaderTagId = new ShaderTagId("CustomLit");
 
+    private static int frameBufferId = Shader.PropertyToID("_CameraFrameBuffer");
+
     //Light
     private Lighting lighting = new Lighting();
+    //PostFX
+    private PostFXStack postFXStack = new PostFXStack();
 
     public void Render(ScriptableRenderContext context, Camera camera, 
-        bool useDynamicBatching, bool useGPUInstancing, bool useLightPerObject,
-        ShadowSettings shadowSettings)
+        bool useDynamicBatching, bool useGPUInstancing, 
+        bool useLightPerObject, ShadowSettings shadowSettings,
+        PostFXSettings postFXSettings)
     {
         this.context = context;
         this.camera = camera;
@@ -43,16 +48,23 @@ public partial class CameraRenderer
         //lighting中除了设置光源外，还收阴影绘制。阴影绘制是一个独立的过程，需要在场景的主要渲染流程进行之前完成，以便于主渲染流程能够调用阴影渲染得到的阴影贴图
         buffer.BeginSample(SampleName);
         ExecuteBuffer();
-        lighting.Setup(this.context, cullingResults, shadowSettings, useLightPerObject);//应该在调用CameraRenderer.SetUp之前渲染阴影贴图
+        lighting.Setup(context, cullingResults, shadowSettings, useLightPerObject);//应该在调用CameraRenderer.SetUp之前渲染阴影贴图
+        postFXStack.Setup(context, camera, postFXSettings);
         buffer.EndSample(SampleName);
 
         Setup(); //在渲染命令之前设置一些准备信息，例如摄像机的透视信息，摄像机的未知信息等->否则渲染出的SkyBox无法随着视角改变
 
         DrawVisibleGeometry(useDynamicBatching, useGPUInstancing, useLightPerObject);
         DrawUnsupportedShaders();
-        DrawGizmos();
+        DrawGizmosBeforeFX();
+        if (postFXStack.IsActive)
+        {
+            postFXStack.Render(frameBufferId);
+        }
+        DrawGizmosAfterFX();
 
-        lighting.CleanUp();//清楚光照相关的RT
+        Cleanup();
+        //lighting.Cleanup();//清除光照相关的RT
         //在次这些指令只是存在buffer上，不会被提交。需要通过执行Submit来提交到队列
         Submit();
 
@@ -74,9 +86,37 @@ public partial class CameraRenderer
     void Setup()
     {
         context.SetupCameraProperties(this.camera);
+        CameraClearFlags flags = camera.clearFlags;
+
+        //用于处理PostFX的RT，如果开启PostFX则这张RT会作为最终的RenderTarget
+        if (postFXStack.IsActive)
+        {
+            if (flags > CameraClearFlags.Color)
+            {
+                //为了避免用于处理PostFX的RT上有随机的数据，需要确保清除depth和color
+                //但是这样的处理会使得当启用后处理时，无法实现一个相机在另一个相机已渲染的结果上进行进一步渲染（例如小地图的绘制）
+                flags = CameraClearFlags.Color;
+            }
+            buffer.GetTemporaryRT(
+                frameBufferId, camera.pixelWidth, camera.pixelHeight,
+                32, FilterMode.Bilinear, RenderTextureFormat.Default);
+            buffer.SetRenderTarget(
+                frameBufferId,
+                RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
+        }
+        
         buffer.ClearRenderTarget(true, true, Color.clear);
         buffer.BeginSample(SampleName);
         ExecuteBuffer();
+    }
+
+    void Cleanup()
+    {
+        lighting.Cleanup();
+        if (postFXStack.IsActive)
+        {
+            buffer.ReleaseTemporaryRT(frameBufferId);
+        }
     }
 
     void Submit()

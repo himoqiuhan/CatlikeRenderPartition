@@ -8,8 +8,11 @@ public partial class CustomRenderPipeline : RenderPipeline
     //自己创建的CameraRenderer，此处的CameraRenderer几乎等同于URP中的Scriptable Renderer
     private bool useDynamicBatching, useGPUInstancing, useLightPerObject;
     private ShadowSettings shadowSettings;
+    private PostFXSettings postFXSettings;
 
-    public CustomRenderPipeline(bool useDynamicBatching, bool useGPUInstancing, bool useSRPBatcher, bool useLightPerObject, ShadowSettings shadowSettings)
+    public CustomRenderPipeline(bool useDynamicBatching, bool useGPUInstancing, bool useSRPBatcher, 
+        bool useLightPerObject, ShadowSettings shadowSettings, 
+        PostFXSettings postFXSettings)
     {
         this.useDynamicBatching = useDynamicBatching;
         this.useGPUInstancing = useGPUInstancing;
@@ -17,6 +20,7 @@ public partial class CustomRenderPipeline : RenderPipeline
         GraphicsSettings.lightsUseLinearIntensity = true;
         this.useLightPerObject = useLightPerObject;
         this.shadowSettings = shadowSettings;
+        this.postFXSettings = postFXSettings;
         InitializeForEditor();
     }
 
@@ -25,7 +29,9 @@ public partial class CustomRenderPipeline : RenderPipeline
     {
         for (int i = 0; i < cameras.Length; i++)
         {
-            renderer.Render(context, cameras[i], useDynamicBatching, useGPUInstancing, useLightPerObject, shadowSettings);
+            renderer.Render(context, cameras[i], useDynamicBatching, useGPUInstancing, 
+                useLightPerObject, shadowSettings,
+                postFXSettings);
         }
     }
 }

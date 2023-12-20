@@ -14,12 +14,13 @@ public class CustomRenderPipelineAsset : RenderPipelineAsset
         useLightsPerObject = true;
     
     [SerializeField] private ShadowSettings shadows = default;
+    [SerializeField] private PostFXSettings postFXSettings = default;
     
     protected override RenderPipeline CreatePipeline()
     //用于获取Pipeline Object Instance，使用protected保护，意味着只有这个类及其派生才能调用这个函数
     {
         return new CustomRenderPipeline(
             useDynamicBatching, useGPUInstancing, useSRPBatcher, 
-            useLightsPerObject, shadows);
+            useLightsPerObject, shadows, postFXSettings);
     }
 }

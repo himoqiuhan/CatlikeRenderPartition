@@ -1,6 +1,11 @@
 using Unity.Collections;
+using UnityEditor;
+using UnityEditor.Rendering.LookDev;
 using UnityEngine;
 using UnityEngine.Experimental.GlobalIllumination;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.VirtualTexturing;
+using Lightmapping = UnityEngine.Experimental.GlobalIllumination.Lightmapping;
 using LightType = UnityEngine.LightType;
 
 
