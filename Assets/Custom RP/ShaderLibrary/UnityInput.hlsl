@@ -26,6 +26,9 @@
 //  //处理Per Object Light -- unity_LightData.y存储光源的数量，unity_LightIndices[2]的所有通道用于存储光源索引（所以PerObjectLight最多有8个）
 //  real4 unity_LightData;
 //  real4 unity_LightIndices[2];
+//
+//  //处理平台差异
+//  float4 _ProjectionParams;
 // CBUFFER_END
 //
 // //volume数据存储在3D float Texture中
