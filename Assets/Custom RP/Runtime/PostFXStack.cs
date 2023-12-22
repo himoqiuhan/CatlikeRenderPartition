@@ -18,7 +18,13 @@ public partial class PostFXStack
 
     private PostFXSettings settings;
 
-    private int fxSourceId = Shader.PropertyToID("_PostFXSource");
+    private int 
+        bloomBicubicUpsamplingId = Shader.PropertyToID("_BloomBicubicUpsampling"),
+        bloomPrefilterId = Shader.PropertyToID("_BloomPrefilter"),
+        bloomThresholdId = Shader.PropertyToID("_BloomThreshold"),
+        bloomIntensityId = Shader.PropertyToID("_BloomIntensity"),
+        fxSourceId = Shader.PropertyToID("_PostFXSource"),
+        fxSource2Id = Shader.PropertyToID("_PostFXSource2");
 
     private const int maxBloomPyramidLevels = 16;
 
@@ -27,7 +33,8 @@ public partial class PostFXStack
     //用于添加Pass的Enum
     enum Pass
     {
-        Copy
+        BloomCombine, BloomHorizontal, BloomPrefilter ,BloomVertical,
+        Copy,
     }
 
     //PostFX是否启用，由是否有PostFXSettings来判断
@@ -37,7 +44,7 @@ public partial class PostFXStack
     {
         //PropertyToID会按照顺序执行，所以我们只需要获取第一个Pyramid的ID就可以获取到后续的ID
         bloomPyramidId = Shader.PropertyToID("_BloomPyramid0");
-        for (int i = 1; i < maxBloomPyramidLevels; i++)
+        for (int i = 1; i < maxBloomPyramidLevels * 2; i++)
         {
             Shader.PropertyToID("_BloomPyramid" + i);
         }
@@ -78,31 +85,99 @@ public partial class PostFXStack
     void DoBloom(int sourceId)
     {
         buffer.BeginSample("Bloom");
+        PostFXSettings.BloomSettings bloom = settings.Bloom;
         int width = camera.pixelWidth / 2, height = camera.pixelHeight / 2;
-        RenderTextureFormat format = RenderTextureFormat.Default;
-        int fromId = sourceId, toId = bloomPyramidId;
 
-        int i;
-        for (i = 0; i < maxBloomPyramidLevels; i++)
+        //迭代次数为0，或是贴图Texel小于最低大小限制的情况，直接使用Copy，不再进行模糊与混合
+        //可能是为了代码的一致性，不考虑在外关闭DoBloom
+        if (bloom.maxIterations == 0 || bloom.intensity <= 0f || 
+            height < bloom.downscaleLimit * 2 || width < bloom.downscaleLimit * 2)
         {
-            if (height < 1 || width < 1)
+            Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);
+            buffer.EndSample("Bloom");
+        }
+        
+        //计算Bloom区域阈值的Knee Curve
+        Vector4 threshold;
+        threshold.x = Mathf.GammaToLinearSpace(bloom.threshold);
+        threshold.y = threshold.x * bloom.thresholdKnee;
+        threshold.z = 2f * threshold.y;
+        threshold.w = 0.25f / (threshold.y + 0.00001f);
+        threshold.y -= threshold.x;
+        buffer.SetGlobalVector(bloomThresholdId, threshold);
+        
+        RenderTextureFormat format = RenderTextureFormat.Default;
+        //通过一个半分辨率的Prefilter来优化性能，同时处理Bloom区域的Filter
+        buffer.GetTemporaryRT(bloomPrefilterId, width, height, 0, FilterMode.Bilinear, format);
+        Draw(sourceId, bloomPrefilterId, Pass.BloomPrefilter);
+        //复制完后，进一步减半分辨率，用于后续BloomPyramid的计算
+        width /= 2;
+        height /= 2;
+        
+        int fromId = bloomPrefilterId, toId = bloomPyramidId + 1;
+        int i;
+        for (i = 0; i < bloom.maxIterations; i++)
+        {
+            if (height < bloom.downscaleLimit || width < bloom.downscaleLimit)
             {
                 break;
             }
+
+            int midId = toId - 1;
+            buffer.GetTemporaryRT(midId, width, height, 0, FilterMode.Bilinear, format);
             buffer.GetTemporaryRT(toId, width, height, 0, FilterMode.Bilinear, format);
-            Draw(fromId, toId, Pass.Copy);
+            Draw(fromId, midId, Pass.BloomHorizontal);
+            Draw(midId, toId, Pass.BloomVertical);
             fromId = toId;
-            toId += 1;
+            toId += 2;
             width /= 2;
             height /= 2;
         }
         
-        Draw(fromId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);
-
-        for (i -= 1; i >= 0; i--)
+        //后续需要使用的的Mips都在BloomPyramid中，所以此处可以释放Prefilter
+        buffer.ReleaseTemporaryRT(bloomPrefilterId);
+        
+        //在升采样前将Bicubic设置传递给GPU
+        buffer.SetGlobalFloat(bloomBicubicUpsamplingId, bloom.bicubicUpsampling ? 1f : 0f);
+        //在同一个Combine Pass中实现对Intensity的控制，但是Intensity只用于控制最终的混合，所以在升采样的时候设置为1f
+        buffer.SetGlobalFloat(bloomIntensityId, 1f);
+        
+        // Draw(fromId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);
+        if (i > 1)
         {
-            buffer.ReleaseTemporaryRT(bloomPyramidId + i);
+            //迭代次数>=2时的情况
+            //进行升采样
+            //释放最后一次用于Horizontal模糊的目标RT
+            buffer.ReleaseTemporaryRT(fromId - 1);
+            //然后将目标设置为上一层级（金字塔下一层）的mid RT（Horizontal Draw的目标RT）
+            toId -= 5;//-5的原因：常规理解是-3，但是降采样过程中，最后得到最低限度的RT（金字塔最高RT）之后，对toId再进行了一次+2，所以是-5
+
+            //进入升采样的循环前，toId停留在上一级Mip的Horizontal Draw Target上，fromId停留在当前Mip的模糊结果上
+            for (i -= 1; i > 0; i--)
+            {
+                //逻辑是混合当前mip结果与上一级mip结果，存到计算上一级mip使用的Horizontal Draw Target上
+                buffer.SetGlobalTexture(fxSource2Id, toId + 1);//此时的toId+1为上一级的mip
+                Draw(fromId, toId, Pass.BloomCombine);
+                //在循环中释放的是当前mip混合结果与上一级的mip结果（已经与上一级混合完成，所以上一级结果可以释放）
+                //（注：fromId第一次释放的是mip，后续均为Horizontal Target形式的mid mip，所以在循环开始前需要释放当前的mid mip）
+                buffer.ReleaseTemporaryRT(fromId);
+                buffer.ReleaseTemporaryRT(toId + 1);
+                fromId = toId;
+                toId -= 2;
+            }
         }
+        else
+        {
+            //迭代次数=1，即只进行一次高斯模糊计算的情况，不再需要升采样
+            buffer.ReleaseTemporaryRT(bloomPyramidId);
+        }
+        
+        //最终混合前设置Bloom Intensity为BloomSetting中的值
+        buffer.SetGlobalFloat(bloomIntensityId, bloom.intensity);
+        //当i=0时，得到最终的结果是只剩下_BloomPyramid0，其中存储所有mips的混合结果
+        buffer.SetGlobalTexture(fxSource2Id, sourceId);
+        Draw(fromId, BuiltinRenderTextureType.CameraTarget, Pass.BloomCombine);
+        buffer.ReleaseTemporaryRT(fromId);
         
         buffer.EndSample("Bloom");
     }

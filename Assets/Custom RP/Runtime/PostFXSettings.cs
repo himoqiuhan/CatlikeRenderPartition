@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 [CreateAssetMenu(menuName = "Rendering/Custom Post FX Settings")]
 public class PostFXSettings : ScriptableObject
@@ -6,6 +7,21 @@ public class PostFXSettings : ScriptableObject
     [SerializeField] private Shader shader = default;
     //只需要在有需求时创建这个mat，不需要序列化
     [System.NonSerialized] private Material material;
+    
+    [System.Serializable]
+    public struct BloomSettings
+    {
+        [Range(0f, 16f)] public int maxIterations;
+        [Min(1f)] public int downscaleLimit;
+        public bool bicubicUpsampling;
+        [Min(0f)] public float threshold;
+        [Range(0f, 1f)] public float thresholdKnee;
+        [Min(0f)] public float intensity;
+    }
+
+    [SerializeField] private BloomSettings bloom = default;
+
+    public BloomSettings Bloom => bloom;
 
     public Material Material
     {
