@@ -33,7 +33,7 @@ public partial class PostFXStack
     //用于添加Pass的Enum
     enum Pass
     {
-        BloomCombine, BloomHorizontal, BloomPrefilter ,BloomVertical,
+        BloomCombine, BloomHorizontal, BloomPrefilter , BloomPrefilterFireflies ,BloomVertical,
         Copy,
     }
 
@@ -113,7 +113,8 @@ public partial class PostFXStack
         RenderTextureFormat format = useHDR ? RenderTextureFormat.DefaultHDR : RenderTextureFormat.Default;
         //通过一个半分辨率的Prefilter来优化性能，同时处理Bloom区域的Filter
         buffer.GetTemporaryRT(bloomPrefilterId, width, height, 0, FilterMode.Bilinear, format);
-        Draw(sourceId, bloomPrefilterId, Pass.BloomPrefilter);
+        Draw(sourceId, bloomPrefilterId, 
+            bloom.fadeFireflies ? Pass.BloomPrefilterFireflies : Pass.BloomPrefilter);
         //复制完后，进一步减半分辨率，用于后续BloomPyramid的计算
         width /= 2;
         height /= 2;

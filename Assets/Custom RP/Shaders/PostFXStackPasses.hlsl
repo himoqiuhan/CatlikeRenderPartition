@@ -1,6 +1,7 @@
 #ifndef CUSTOM_POST_FX_PASSES_INCLUDED
 #define CUSTOM_POST_FX_PASSES_INCLUDED
 
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Filtering.hlsl"
 
 TEXTURE2D(_PostFXSource);
@@ -145,6 +146,30 @@ float3 ApplyBloomThreshold(float3 color)
 float4 BloomPrefilterPassFragment(Varyings input) : SV_Target
 {
     float3 color = ApplyBloomThreshold(GetSource(input.screenUV).rgb);
+    return float4(color, 1.0);
+}
+
+float4 BloomPrefilterFirefliesPassFragment(Varyings input) : SV_Target
+{
+    float3 color = 0.0;
+    float weightSum = 0.0;
+    float2 offsets[] = {
+        float2(0.0, 0.0),
+        float2(-1.0, -1.0), float2(-1.0, 1.0), float2(1.0, -1.0), float2(1.0, 1.0),
+        //简单优化：因为后续会对Prefilter的结果进行高斯模糊，其处理会横向+纵向处理；维持效果的同时，我们在这里可以省去“上下左右”四个点的采样
+        //得到的Prefilter一个像素处理后会呈现出X的样子，但是在第一次高斯模糊完成后其结果与9个采样点的效果差别很小
+        //float2(-1.0, 0.0), float2(1.0, 0.0), float2(0.0, -1.0), float2(0.0, 1.0)
+    };
+    for(int i = 0; i < 5; i++)
+    {
+        //因为输出的目标是半分辨率，所以偏移值需要*2
+        float3 c = GetSource(input.screenUV + offsets[i] * GetSourceTexelSize().xy * 2.0).rgb;
+        c = ApplyBloomThreshold(c);
+        float w = 1.0 / (Luminance(c) + 1.0);
+        color += c * w;
+        weightSum += w;
+    }
+    color /= weightSum;
     return float4(color, 1.0);
 }
 

@@ -20,3 +20,4 @@ MonoBehaviour:
     threshold: 5
     thresholdKnee: 0.5
     intensity: 1
+    fadeFireflies: 1
