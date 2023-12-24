@@ -39,6 +39,8 @@ public partial class PostFXStack
 
     //PostFX是否启用，由是否有PostFXSettings来判断
     public bool IsActive => settings != null;
+    //Post FX HDR处理
+    private bool useHDR;
 
     public PostFXStack()
     {
@@ -50,13 +52,14 @@ public partial class PostFXStack
         }
     }
     
-    public void Setup(ScriptableRenderContext context, Camera camera, PostFXSettings settings)
+    public void Setup(ScriptableRenderContext context, Camera camera, PostFXSettings settings, bool useHDR)
     {
         this.context = context;
         this.camera = camera;
         this.settings = 
             camera.cameraType <= CameraType.SceneView ? settings : null;
         ApplySceneViewState();
+        this.useHDR = useHDR;
     }
 
     public void Render(int sourceId)
@@ -106,7 +109,8 @@ public partial class PostFXStack
         threshold.y -= threshold.x;
         buffer.SetGlobalVector(bloomThresholdId, threshold);
         
-        RenderTextureFormat format = RenderTextureFormat.Default;
+        //区分LDR Bloom和HDR Bloom的处理，即使用不同的RT
+        RenderTextureFormat format = useHDR ? RenderTextureFormat.DefaultHDR : RenderTextureFormat.Default;
         //通过一个半分辨率的Prefilter来优化性能，同时处理Bloom区域的Filter
         buffer.GetTemporaryRT(bloomPrefilterId, width, height, 0, FilterMode.Bilinear, format);
         Draw(sourceId, bloomPrefilterId, Pass.BloomPrefilter);

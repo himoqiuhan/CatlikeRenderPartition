@@ -17,6 +17,6 @@ MonoBehaviour:
     maxIterations: 4
     downscaleLimit: 1
     bicubicUpsampling: 1
-    threshold: 0.5
-    thresholdKnee: 0.723
+    threshold: 5
+    thresholdKnee: 0.5
     intensity: 1

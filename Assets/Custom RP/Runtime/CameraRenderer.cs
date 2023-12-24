@@ -28,14 +28,17 @@ public partial class CameraRenderer
     private Lighting lighting = new Lighting();
     //PostFX
     private PostFXStack postFXStack = new PostFXStack();
+    //HDR Settings
+    private bool useHDR;
 
-    public void Render(ScriptableRenderContext context, Camera camera, 
+    public void Render(ScriptableRenderContext context, Camera camera, bool allowHDR,
         bool useDynamicBatching, bool useGPUInstancing, 
         bool useLightPerObject, ShadowSettings shadowSettings,
         PostFXSettings postFXSettings)
     {
         this.context = context;
         this.camera = camera;
+        this.useHDR = allowHDR && camera.allowHDR;
 
         PrepareBuffer();
         PrepareForSceneWindow();
@@ -49,7 +52,7 @@ public partial class CameraRenderer
         buffer.BeginSample(SampleName);
         ExecuteBuffer();
         lighting.Setup(context, cullingResults, shadowSettings, useLightPerObject);//应该在调用CameraRenderer.SetUp之前渲染阴影贴图
-        postFXStack.Setup(context, camera, postFXSettings);
+        postFXStack.Setup(context, camera, postFXSettings, useHDR);
         buffer.EndSample(SampleName);
 
         Setup(); //在渲染命令之前设置一些准备信息，例如摄像机的透视信息，摄像机的未知信息等->否则渲染出的SkyBox无法随着视角改变
@@ -97,9 +100,10 @@ public partial class CameraRenderer
                 //但是这样的处理会使得当启用后处理时，无法实现一个相机在另一个相机已渲染的结果上进行进一步渲染（例如小地图的绘制）
                 flags = CameraClearFlags.Color;
             }
+            //HDR渲染只在开启后处理时使用，因为我们能改变用于后处理输入的RT的格式，但是不能改变最终真正的frameBuffer的格式
             buffer.GetTemporaryRT(
                 frameBufferId, camera.pixelWidth, camera.pixelHeight,
-                32, FilterMode.Bilinear, RenderTextureFormat.Default);
+                32, FilterMode.Bilinear, useHDR ? RenderTextureFormat.DefaultHDR : RenderTextureFormat.Default);
             buffer.SetRenderTarget(
                 frameBufferId,
                 RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
