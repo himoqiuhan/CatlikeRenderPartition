@@ -21,6 +21,7 @@ public partial class PostFXStack
     private int 
         bloomBicubicUpsamplingId = Shader.PropertyToID("_BloomBicubicUpsampling"),
         bloomPrefilterId = Shader.PropertyToID("_BloomPrefilter"),
+        bloomResultId = Shader.PropertyToID("_BloomResult"),
         bloomThresholdId = Shader.PropertyToID("_BloomThreshold"),
         bloomIntensityId = Shader.PropertyToID("_BloomIntensity"),
         fxSourceId = Shader.PropertyToID("_PostFXSource"),
@@ -33,8 +34,15 @@ public partial class PostFXStack
     //用于添加Pass的Enum
     enum Pass
     {
-        BloomCombine, BloomHorizontal, BloomPrefilter , BloomPrefilterFireflies ,BloomVertical,
+        BloomAdd, 
+        BloomHorizontal,
+        BloomPrefilter , BloomPrefilterFireflies , 
+        BloomScatter, BloomScatterFinal, 
+        BloomVertical,
         Copy,
+        ToneMappingACES,
+        ToneMappingNeural,
+        ToneMappingReinhard,
     }
 
     //PostFX是否启用，由是否有PostFXSettings来判断
@@ -68,7 +76,16 @@ public partial class PostFXStack
         //通过Blit函数来执行，此处以sourceId和CameraTarget作为参数，传入图像源与渲染的目标
         //buffer.Blit(sourceId, BuiltinRenderTextureType.CameraTarget);
         //Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);
-        DoBloom(sourceId);
+        if (DoBloom(sourceId))
+            //if判断，如果执行了Bloom则以Bloom的结果为源进行ToneMapping；如果没有执行Bloom，则直接将原输入作为ToneMapping的输入
+        {
+            DoToneMapping(bloomResultId);
+            buffer.ReleaseTemporaryRT(bloomResultId);
+        }
+        else
+        {
+            DoToneMapping(sourceId);
+        }
         //然后通过Context.ExecuteCommandBuffer和Clear来执行并清空Buffer
         context.ExecuteCommandBuffer(buffer);
         buffer.Clear();
@@ -85,9 +102,10 @@ public partial class PostFXStack
     }
     
     //执行Bloom
-    void DoBloom(int sourceId)
+    bool DoBloom(int sourceId)
+        //基于ToneMapping的处理，将DoBloom返回值设置为Bool，区分是否使用Bloom来处理ToneMapping的输入源
     {
-        buffer.BeginSample("Bloom");
+        //buffer.BeginSample("Bloom");
         PostFXSettings.BloomSettings bloom = settings.Bloom;
         int width = camera.pixelWidth / 2, height = camera.pixelHeight / 2;
 
@@ -96,9 +114,12 @@ public partial class PostFXStack
         if (bloom.maxIterations == 0 || bloom.intensity <= 0f || 
             height < bloom.downscaleLimit * 2 || width < bloom.downscaleLimit * 2)
         {
-            Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);
-            buffer.EndSample("Bloom");
+            // Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);
+            // buffer.EndSample("Bloom");
+            return false;
         }
+        
+        buffer.BeginSample("Bloom");
         
         //计算Bloom区域阈值的Knee Curve
         Vector4 threshold;
@@ -144,8 +165,26 @@ public partial class PostFXStack
         
         //在升采样前将Bicubic设置传递给GPU
         buffer.SetGlobalFloat(bloomBicubicUpsamplingId, bloom.bicubicUpsampling ? 1f : 0f);
-        //在同一个Combine Pass中实现对Intensity的控制，但是Intensity只用于控制最终的混合，所以在升采样的时候设置为1f
-        buffer.SetGlobalFloat(bloomIntensityId, 1f);
+        
+        
+        //Scattering开启/关闭
+        Pass combinePass, finalPass;
+        float finalIntensity;
+        if (bloom.mode == PostFXSettings.BloomSettings.Mode.Additive)
+        {
+            combinePass = finalPass = Pass.BloomAdd;
+            //在同一个Combine Pass中实现对Intensity的控制，但是使用Additive模式时，Intensity只用于控制最终的混合，所以在升采样的时候设置为1f
+            buffer.SetGlobalFloat(bloomIntensityId, 1f);
+            finalIntensity = bloom.intensity;
+        }
+        else
+        {
+            combinePass = Pass.BloomScatter;
+            finalPass = Pass.BloomScatterFinal;
+            buffer.SetGlobalFloat(bloomIntensityId, bloom.scatter);
+            finalIntensity = Mathf.Min(bloom.intensity, 0.95f);
+        }
+        
         
         // Draw(fromId, BuiltinRenderTextureType.CameraTarget, Pass.Copy);
         if (i > 1)
@@ -162,7 +201,7 @@ public partial class PostFXStack
             {
                 //逻辑是混合当前mip结果与上一级mip结果，存到计算上一级mip使用的Horizontal Draw Target上
                 buffer.SetGlobalTexture(fxSource2Id, toId + 1);//此时的toId+1为上一级的mip
-                Draw(fromId, toId, Pass.BloomCombine);
+                Draw(fromId, toId, combinePass);
                 //在循环中释放的是当前mip混合结果与上一级的mip结果（已经与上一级混合完成，所以上一级结果可以释放）
                 //（注：fromId第一次释放的是mip，后续均为Horizontal Target形式的mid mip，所以在循环开始前需要释放当前的mid mip）
                 buffer.ReleaseTemporaryRT(fromId);
@@ -178,13 +217,25 @@ public partial class PostFXStack
         }
         
         //最终混合前设置Bloom Intensity为BloomSetting中的值
-        buffer.SetGlobalFloat(bloomIntensityId, bloom.intensity);
+        buffer.SetGlobalFloat(bloomIntensityId, finalIntensity);
         //当i=0时，得到最终的结果是只剩下_BloomPyramid0，其中存储所有mips的混合结果
         buffer.SetGlobalTexture(fxSource2Id, sourceId);
-        Draw(fromId, BuiltinRenderTextureType.CameraTarget, Pass.BloomCombine);
+        buffer.GetTemporaryRT(
+            bloomResultId, camera.pixelWidth, camera.pixelHeight, 0,
+            FilterMode.Bilinear, format
+            );
+        Draw(fromId, bloomResultId, finalPass);
         buffer.ReleaseTemporaryRT(fromId);
         
         buffer.EndSample("Bloom");
+
+        return true;
     }
-    
+
+    void DoToneMapping(int sourceId)
+    {
+        PostFXSettings.ToneMappingSettings.Mode mode = settings.ToneMapping.mode;
+        Pass pass = mode < 0 ? Pass.Copy : Pass.ToneMappingACES + (int)mode;
+        Draw(sourceId, BuiltinRenderTextureType.CameraTarget, pass);
+    }
 }

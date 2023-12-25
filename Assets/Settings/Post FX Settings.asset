@@ -21,3 +21,7 @@ MonoBehaviour:
     thresholdKnee: 0.5
     intensity: 1
     fadeFireflies: 1
+    mode: 1
+    scatter: 0.5
+  toneMapping:
+    mode: 2

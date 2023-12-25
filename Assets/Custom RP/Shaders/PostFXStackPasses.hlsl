@@ -113,7 +113,7 @@ float4 GetSourceBicubic(float2 screenUV)
         );
 }
 
-float4 BloomCombinePassFragment(Varyings input) : SV_Target
+float4 BloomAddPassFragment(Varyings input) : SV_Target
 {
     float3 lowRes;
     //Bicubic采样会带来一定的性能消耗，所以将其设置为静态分支（URP和HDRP中的High Quality Bloom就是控制这个的）
@@ -126,6 +126,7 @@ float4 BloomCombinePassFragment(Varyings input) : SV_Target
         lowRes = GetSource(input.screenUV).rgb;
     }
     float3 highRes = GetSource2(input.screenUV).rgb;
+    //Add是基于强度对低层级进行叠加
     return float4(lowRes * _BloomIntensity + highRes, 1.0);
 }
 
@@ -171,6 +172,68 @@ float4 BloomPrefilterFirefliesPassFragment(Varyings input) : SV_Target
     }
     color /= weightSum;
     return float4(color, 1.0);
+}
+
+//用于Bloom Scatter的Fragment混合函数
+float4 BloomScatterPassFragment(Varyings input) : SV_Target
+{
+    float3 lowRes;
+    if (_BloomBicubicUpsampling)
+    {
+        lowRes = GetSourceBicubic(input.screenUV).rgb;
+    }
+    else
+    {
+        lowRes = GetSource(input.screenUV).rgb;
+    }
+    float3 highRes = GetSource2(input.screenUV).rgb;
+    //Scatter是基于BloomIntensity进行逐级混合之间的插值，并不再是简单的相加
+    return float4(lerp(highRes, lowRes, _BloomIntensity), 1.0);
+}
+
+float4 BloomScatterFinalPassFragment(Varyings input) : SV_Target
+{
+    float3 lowRes;
+    if (_BloomBicubicUpsampling)
+    {
+        lowRes = GetSourceBicubic(input.screenUV).rgb;
+    }
+    else
+    {
+        lowRes = GetSource(input.screenUV).rgb;
+    }
+    float3 highRes = GetSource2(input.screenUV).rgb;
+    //在这一套流程中，需要通过原图与混合后的图像的lerp来得到最终的结果，所以需要额外对lowRes的处理
+    //此时输入的lowRes只是Bloom区域Scatter的混合结果，非Bloom区域是全黑的，需要将非Bloom区域加入到lowRes中
+    lowRes += highRes - ApplyBloomThreshold(highRes);
+    return float4(lerp(highRes, lowRes, _BloomIntensity), 1.0);
+}
+
+float4 ToneMappingACESPassFragment(Varyings input) : SV_Target
+{
+    float4 color = GetSource(input.screenUV);
+    //为了避免Mac和移动端的一些Bug，需要对ToneMapping处理前的数据进行一个Clamp（猜测是因为被除数太大，Metal API中对此类精度的支持不足导致）
+    color.rgb = min(color.rgb, 60.0);
+    color.rgb = AcesTonemap(unity_to_ACES(color.rgb));
+    return color;
+}
+
+float4 ToneMappingNeutralPassFragment(Varyings input) : SV_Target
+{
+    float4 color = GetSource(input.screenUV);
+    //为了避免Mac和移动端的一些Bug，需要对ToneMapping处理前的数据进行一个Clamp（猜测是因为被除数太大，Metal API中对此类精度的支持不足导致）
+    color.rgb = min(color.rgb, 60.0);
+    color.rgb = NeutralTonemap(color.rgb);
+    return color;
+}
+
+float4 ToneMappingReinhardPassFragment(Varyings input) : SV_Target
+{
+    float4 color = GetSource(input.screenUV);
+    //为了避免Mac和移动端的一些Bug，需要对ToneMapping处理前的数据进行一个Clamp（猜测是因为被除数太大，Metal API中对此类精度的支持不足导致）
+    color.rgb = min(color.rgb, 60.0);
+    color.rgb /= color.rgb + 1.0;
+    return color;
 }
 
 #endif

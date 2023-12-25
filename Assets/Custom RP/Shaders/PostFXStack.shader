@@ -14,12 +14,12 @@ Shader "Hidden/Custom RP/Post FX Stack"
         //按字母顺序排列Pass，便于C#中通过Enum来可视化控制（选择）Pass
         Pass
         {
-            Name "Bloom Combine"
+            Name "Bloom Add"
 
             HLSLPROGRAM
             #pragma target 3.5
             #pragma vertex DefaultPassVertex
-            #pragma fragment BloomCombinePassFragment
+            #pragma fragment BloomAddPassFragment
             ENDHLSL
         }
 
@@ -58,6 +58,28 @@ Shader "Hidden/Custom RP/Post FX Stack"
 
         Pass
         {
+            Name "Bloom Scatter"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment BloomScatterPassFragment
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Bloom Scatter Final"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment BloomScatterFinalPassFragment
+            ENDHLSL
+        }
+
+        Pass
+        {
             Name "Bloom Vertical"
 
             HLSLPROGRAM
@@ -78,6 +100,38 @@ Shader "Hidden/Custom RP/Post FX Stack"
             ENDHLSL
         }
 
+        Pass
+        {
+            Name "Tone Mapping ACES"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment ToneMappingACESPassFragment
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Tone Mapping Neutral"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment ToneMappingNeutralPassFragment
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Tone Mapping Reinhard"
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex DefaultPassVertex
+            #pragma fragment ToneMappingReinhardPassFragment
+            ENDHLSL
+        }
 
     }
 }
