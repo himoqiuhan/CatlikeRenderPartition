@@ -1,5 +1,8 @@
+using System;
 using UnityEngine;
 using UnityEngine.Rendering;
+//using static功能类似于using一个namespace，这个是用于变量的
+using static PostFXSettings;
 
 public partial class PostFXStack
 {
@@ -24,6 +27,14 @@ public partial class PostFXStack
         bloomResultId = Shader.PropertyToID("_BloomResult"),
         bloomThresholdId = Shader.PropertyToID("_BloomThreshold"),
         bloomIntensityId = Shader.PropertyToID("_BloomIntensity"),
+        colorAdjustmentsId = Shader.PropertyToID("_ColorAdjustments"),
+        colorFilterId = Shader.PropertyToID("_ColorFilter"),
+        whiteBalanceId = Shader.PropertyToID("_WhiteBalance"),
+        splitToningShadowsId = Shader.PropertyToID("_SplitToningShadows"),
+        splitToningHighlightsId = Shader.PropertyToID("_SplitToningHighlights"),
+        channelMixerRedId = Shader.PropertyToID("_ChannelMixerRed"),
+        channelMixerGreenId = Shader.PropertyToID("_ChannelMixerGreen"),
+        channelMixerBlueId = Shader.PropertyToID("_ChannelMixerBlue"),
         fxSourceId = Shader.PropertyToID("_PostFXSource"),
         fxSource2Id = Shader.PropertyToID("_PostFXSource2");
 
@@ -40,6 +51,7 @@ public partial class PostFXStack
         BloomScatter, BloomScatterFinal, 
         BloomVertical,
         Copy,
+        ToneMappingNone,
         ToneMappingACES,
         ToneMappingNeural,
         ToneMappingReinhard,
@@ -79,12 +91,12 @@ public partial class PostFXStack
         if (DoBloom(sourceId))
             //if判断，如果执行了Bloom则以Bloom的结果为源进行ToneMapping；如果没有执行Bloom，则直接将原输入作为ToneMapping的输入
         {
-            DoToneMapping(bloomResultId);
+            DoColorGradingAndToneMapping(bloomResultId);
             buffer.ReleaseTemporaryRT(bloomResultId);
         }
         else
         {
-            DoToneMapping(sourceId);
+            DoColorGradingAndToneMapping(sourceId);
         }
         //然后通过Context.ExecuteCommandBuffer和Clear来执行并清空Buffer
         context.ExecuteCommandBuffer(buffer);
@@ -106,7 +118,7 @@ public partial class PostFXStack
         //基于ToneMapping的处理，将DoBloom返回值设置为Bool，区分是否使用Bloom来处理ToneMapping的输入源
     {
         //buffer.BeginSample("Bloom");
-        PostFXSettings.BloomSettings bloom = settings.Bloom;
+        BloomSettings bloom = settings.Bloom;
         int width = camera.pixelWidth / 2, height = camera.pixelHeight / 2;
 
         //迭代次数为0，或是贴图Texel小于最低大小限制的情况，直接使用Copy，不再进行模糊与混合
@@ -170,7 +182,7 @@ public partial class PostFXStack
         //Scattering开启/关闭
         Pass combinePass, finalPass;
         float finalIntensity;
-        if (bloom.mode == PostFXSettings.BloomSettings.Mode.Additive)
+        if (bloom.mode == BloomSettings.Mode.Additive)
         {
             combinePass = finalPass = Pass.BloomAdd;
             //在同一个Combine Pass中实现对Intensity的控制，但是使用Additive模式时，Intensity只用于控制最终的混合，所以在升采样的时候设置为1f
@@ -232,10 +244,55 @@ public partial class PostFXStack
         return true;
     }
 
-    void DoToneMapping(int sourceId)
+    void ConfigureColorAdjustments()
     {
-        PostFXSettings.ToneMappingSettings.Mode mode = settings.ToneMapping.mode;
-        Pass pass = mode < 0 ? Pass.Copy : Pass.ToneMappingACES + (int)mode;
+        ColorAdjustmentsSettings colorAdjustments = settings.ColorAdjustments;
+        buffer.SetGlobalVector(colorAdjustmentsId, new Vector4(
+            Mathf.Pow(2f, colorAdjustments.postExposure),
+            colorAdjustments.contrast * 0.01f + 1f, // Range 0 ~ 2
+            colorAdjustments.hueShift * (1f / 360f), // Range -1 ~ 1
+            colorAdjustments.saturation * 0.01f + 1f // Range 0 ~ 2
+        ));
+        //Color Filter必须要是线性空间的颜色
+        buffer.SetGlobalColor(colorFilterId, colorAdjustments.colorFilter.linear);
+    }
+
+    void ConfigureWhiteBalance()
+    {
+        WhiteBalanceSettings whiteBalance = settings.WhiteBalance;
+        buffer.SetGlobalVector(whiteBalanceId, ColorUtils.ColorBalanceToLMSCoeffs(
+            whiteBalance.temperature, whiteBalance.tint
+            ));
+    }
+
+    void ConfigureSplitToning()
+    {
+        SplitToningSettings splitToning = settings.SplitToning;
+        Color splitColor = splitToning.shadows;
+        splitColor.a = splitToning.balance * 0.01f;
+        //将两个Gamma空间下Color的RGB传入Shader,其中可以将balance数值存入其中一个颜色的A通道
+        buffer.SetGlobalColor(splitToningShadowsId, splitColor);
+        buffer.SetGlobalColor(splitToningHighlightsId, splitToning.hightlights);
+    }
+
+    void ConfigureChannelMixer()
+    {
+        ChannelMixerSettings channelMixer = settings.ChannelMixer;
+        buffer.SetGlobalVector(channelMixerRedId, channelMixer.red);
+        buffer.SetGlobalVector(channelMixerGreenId, channelMixer.green);
+        buffer.SetGlobalVector(channelMixerBlueId, channelMixer.blue);
+    }
+    
+    //ColorGrading和ToneMapping放在一起执行
+    void DoColorGradingAndToneMapping(int sourceId)
+    {
+        ConfigureColorAdjustments();
+        ConfigureWhiteBalance();
+        ConfigureSplitToning();
+        ConfigureChannelMixer();
+        
+        ToneMappingSettings.Mode mode = settings.ToneMapping.mode;
+        Pass pass = Pass.ToneMappingNone + (int)mode;
         Draw(sourceId, BuiltinRenderTextureType.CameraTarget, pass);
     }
 }
