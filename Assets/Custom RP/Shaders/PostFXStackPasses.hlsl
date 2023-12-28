@@ -58,6 +58,12 @@ float4 CopyPassFragment(Varyings input) : SV_Target
     return GetSource(input.screenUV);
 }
 
+//用于处理ACES颜色空间下亮度的Luminance函数变体
+float Luminance(float3 color, bool useACES)
+{
+    return useACES ? AcesLuminance(color) : Luminance(color);
+}
+
 //---------------Bloom---------------
 float4 BloomHorizontalPassFragment(Varyings input) : SV_Target
 {
@@ -218,6 +224,7 @@ float4 _ColorFilter;
 float4 _WhiteBalance;
 float4 _SplitToningShadows, _SplitToningHighlights;
 float4 _ChannelMixerRed, _ChannelMixerGreen, _ChannelMixerBlue;
+float4 _SMHShadows, _SMHMidtones, _SMHHighlights, _SMHRange;
 
 //调整曝光--模拟相机的曝光，在所有后处理FX之后、在所有Color Grading之前运用
 float3 ColorGradePostExposure(float3 color)
@@ -234,11 +241,13 @@ float3 ColorGradeWhiteBalance(float3 color)
 }
 
 //调整对比度--通过减去中灰色，对结果进行缩放，然后再加上中灰色来实现，这里使用的中灰色是ACEScc(ACES颜色空间的一个对数子集)的中灰色
-float3 ColorGradingContrast(float3 color)
+float3 ColorGradingContrast(float3 color, bool useACES)
 {
-    color = LinearToLogC(color);
+    //使用ACES时，Contract一般是在ACES的颜色空间中进行计算处理的
+    color = useACES ? ACES_to_ACEScc(unity_to_ACES(color)) : LinearToLogC(color);
     color = (color - ACEScc_MIDGRAY) * _ColorAdjustments.y + ACEScc_MIDGRAY;
-    return LogCToLinear(color);
+    //ACEScg是ACES颜色空间的一个线性子集
+    return useACES ? ACES_to_ACEScg(ACEScc_to_ACES(color)) : LogCToLinear(color);
 }
 
 //调整颜色滤镜,直接乘颜色值即可
@@ -248,11 +257,11 @@ float3 ColorGradeColorFilter(float3 color)
 }
 
 //调整亮部/暗部各自的颜色
-float3 ColorGradeSplitToning(float3 color)
+float3 ColorGradeSplitToning(float3 color, bool useACES)
 {
     //在Gamma空间中调整,更为直观
     color = PositivePow(color, 1.0 / 2.2);
-    float t = saturate(Luminance(saturate(color)) + _SplitToningShadows.w);
+    float t = saturate(Luminance(saturate(color), useACES) + _SplitToningShadows.w);
     float3 shadows = lerp(0.5, _SplitToningShadows.rgb, 1.0 - t);
     float3 highlights = lerp(0.5, _SplitToningHighlights.rgb, t);
     //使用SoftLight来运用color的改变
@@ -272,9 +281,9 @@ float3 ColorGradingHueShift(float3 color)
 }
 
 //调整饱和度
-float3 ColorGradingSaturation(float3 color)
+float3 ColorGradingSaturation(float3 color, bool useACES)
 {
-    float luminance = Luminance(color);
+    float luminance = Luminance(color, useACES);
     return (color - luminance) * _ColorAdjustments.w + luminance;
 }
 
@@ -287,20 +296,35 @@ float3 ColorGradingChannelMixer(float3 color)
     );
 }
 
-float3 ColorGrade(float3 color)
+//Shadows Midtones Highlights
+float3 ColorGradingShadowsMidtonesHighlights(float3 color, bool useACES)
+{
+    float luminance = Luminance(color, useACES);
+    float shadowsWeight = 1.0 - smoothstep(_SMHRange.x, _SMHRange.y, luminance);
+    float highlightsWeight = smoothstep(_SMHRange.z, _SMHRange.w, luminance);
+    float midtonesWeight = 1.0 - shadowsWeight - highlightsWeight;
+    return
+        color * _SMHShadows.rgb * shadowsWeight +
+            color * _SMHMidtones.rgb * midtonesWeight +
+                color * _SMHHighlights.rgb * highlightsWeight;
+}
+
+float3 ColorGrade(float3 color, bool useACES = false)
 {
     color = min(color, 60.0);
     color = ColorGradePostExposure(color);
     color = ColorGradeWhiteBalance(color);
-    color = ColorGradingContrast(color);
+    color = ColorGradingContrast(color, useACES);
     color = ColorGradeColorFilter(color); //Color Filter的处理可以接受负数
     color = max(color, 0.0); //处理完Contrast之后，颜色值可能会有负数，会影响之后的步骤，所以在这里加一个限制
-    color = ColorGradeSplitToning(color);
+    color = ColorGradeSplitToning(color, useACES);
     color = ColorGradingChannelMixer(color);
     color = max(color, 0.0);
+    color = ColorGradingShadowsMidtonesHighlights(color, useACES);
     color = ColorGradingHueShift(color);
-    color = ColorGradingSaturation(color);
-    color = max(color, 0.0); //处理完Saturation之后同样可能会出现负值
+    color = ColorGradingSaturation(color, useACES);
+    //处理完Saturation之后同样可能会出现负值;同时如果使用了ACES颜色空间，最后输出的颜色应该是ACES颜色空间下的值
+    color = max(useACES ? ACEScg_to_ACES(color):color, 0.0); 
     return color;
 }
 
@@ -317,8 +341,8 @@ float4 ToneMappingACESPassFragment(Varyings input) : SV_Target
 {
     float4 color = GetSource(input.screenUV);
     //为了避免Mac和移动端的一些Bug，需要对ToneMapping处理前的数据进行一个Clamp（猜测是因为被除数太大，Metal API中对此类精度的支持不足导致）
-    color.rgb = ColorGrade(color.rgb);
-    color.rgb = AcesTonemap(unity_to_ACES(color.rgb));
+    color.rgb = ColorGrade(color.rgb, true);
+    color.rgb = AcesTonemap(color.rgb);
     return color;
 }
 
