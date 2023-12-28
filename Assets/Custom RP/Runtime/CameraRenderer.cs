@@ -34,7 +34,7 @@ public partial class CameraRenderer
     public void Render(ScriptableRenderContext context, Camera camera, bool allowHDR,
         bool useDynamicBatching, bool useGPUInstancing, 
         bool useLightPerObject, ShadowSettings shadowSettings,
-        PostFXSettings postFXSettings)
+        PostFXSettings postFXSettings, int colorLUTResolution)
     {
         this.context = context;
         this.camera = camera;
@@ -52,7 +52,7 @@ public partial class CameraRenderer
         buffer.BeginSample(SampleName);
         ExecuteBuffer();
         lighting.Setup(context, cullingResults, shadowSettings, useLightPerObject);//应该在调用CameraRenderer.SetUp之前渲染阴影贴图
-        postFXStack.Setup(context, camera, postFXSettings, useHDR);
+        postFXStack.Setup(context, camera, postFXSettings, useHDR, colorLUTResolution);
         buffer.EndSample(SampleName);
 
         Setup(); //在渲染命令之前设置一些准备信息，例如摄像机的透视信息，摄像机的未知信息等->否则渲染出的SkyBox无法随着视角改变

@@ -10,11 +10,13 @@ public partial class CustomRenderPipeline : RenderPipeline
     private bool useDynamicBatching, useGPUInstancing, useLightPerObject;
     private ShadowSettings shadowSettings;
     private PostFXSettings postFXSettings;
+    private int colorLUTResolution;
 
     public CustomRenderPipeline(bool allowHDR, bool useDynamicBatching, bool useGPUInstancing, bool useSRPBatcher, 
         bool useLightPerObject, ShadowSettings shadowSettings, 
-        PostFXSettings postFXSettings)
+        PostFXSettings postFXSettings, int colorLUTResolution)
     {
+        this.colorLUTResolution = colorLUTResolution;
         this.allowHDR = allowHDR;
         this.useDynamicBatching = useDynamicBatching;
         this.useGPUInstancing = useGPUInstancing;
@@ -34,7 +36,7 @@ public partial class CustomRenderPipeline : RenderPipeline
             renderer.Render(context, cameras[i], allowHDR,
                 useDynamicBatching, useGPUInstancing, 
                 useLightPerObject, shadowSettings,
-                postFXSettings);
+                postFXSettings, colorLUTResolution);
         }
     }
 }

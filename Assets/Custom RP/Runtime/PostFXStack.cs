@@ -39,8 +39,11 @@ public partial class PostFXStack
         smhMidtonesId = Shader.PropertyToID("_SMHMidtones"),
         smhHighlightId = Shader.PropertyToID("_SMHHighlights"),
         smhRangeId = Shader.PropertyToID("_SMHRange"),
+        colorGradingLUTParametersId = Shader.PropertyToID("_ColorGradingLUTParameters"),
+        colorGradingLUTInLogCId = Shader.PropertyToID("_ColorGradingLUTInLogC"),
         fxSourceId = Shader.PropertyToID("_PostFXSource"),
-        fxSource2Id = Shader.PropertyToID("_PostFXSource2");
+        fxSource2Id = Shader.PropertyToID("_PostFXSource2"),
+        colorGradingLUTId = Shader.PropertyToID("_ColorGradingLUT");
 
     private const int maxBloomPyramidLevels = 16;
 
@@ -55,16 +58,19 @@ public partial class PostFXStack
         BloomScatter, BloomScatterFinal, 
         BloomVertical,
         Copy,
-        ToneMappingNone,
-        ToneMappingACES,
-        ToneMappingNeural,
-        ToneMappingReinhard,
+        ColorGradingNone,
+        ColorGradingACES,
+        ColorGradingNeural,
+        ColorGradingReinhard,
+        Final
     }
 
     //PostFX是否启用，由是否有PostFXSettings来判断
     public bool IsActive => settings != null;
     //Post FX HDR处理
     private bool useHDR;
+    //LUT
+    private int colorLUTResolution;
 
     public PostFXStack()
     {
@@ -76,8 +82,10 @@ public partial class PostFXStack
         }
     }
     
-    public void Setup(ScriptableRenderContext context, Camera camera, PostFXSettings settings, bool useHDR)
+    public void Setup(ScriptableRenderContext context, Camera camera, PostFXSettings settings, 
+        bool useHDR, int colorLUTResolution)
     {
+        this.colorLUTResolution = colorLUTResolution;
         this.context = context;
         this.camera = camera;
         this.settings = 
@@ -306,9 +314,28 @@ public partial class PostFXStack
         ConfigureSplitToning();
         ConfigureChannelMixer();
         ConfigureShadowsMidtonesHighlights();
+
+        int lutHeight = colorLUTResolution;
+        int lutWidth = lutHeight * lutHeight;
+        buffer.GetTemporaryRT(
+            colorGradingLUTId, lutWidth, lutHeight, 0,
+            FilterMode.Bilinear, RenderTextureFormat.DefaultHDR);
+        buffer.SetGlobalVector(colorGradingLUTParametersId, 
+            new Vector4(lutHeight, 0.5f / lutWidth, 0.5f / lutHeight, lutHeight / (lutHeight - 1f)));
         
         ToneMappingSettings.Mode mode = settings.ToneMapping.mode;
-        Pass pass = Pass.ToneMappingNone + (int)mode;
-        Draw(sourceId, BuiltinRenderTextureType.CameraTarget, pass);
+        Pass pass = Pass.ColorGradingNone + (int)mode;
+        //对于开启HDR，并使用Tonemapping的LUT，在LogC空间下进行计算（颜色范围更大，最大到59）
+        //其余情况在线性空间下进行计算（颜色值的范围为0-1）
+        buffer.SetGlobalFloat(
+            colorGradingLUTInLogCId, useHDR && pass != Pass.ColorGradingNone ? 1f : 0f);
+        //实际上ColorLUT的计算不需要输入任何source texture，但是Draw函数需要有source texture的输入
+        Draw(sourceId, colorGradingLUTId, pass);
+        
+        //重新设置ColorGradingLUTParameters，用于Final Pass处理最终的输出
+        buffer.SetGlobalVector(colorGradingLUTParametersId,
+            new Vector4(1f / lutWidth, 1f / lutHeight, lutHeight - 1f));
+        Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Final);
+        buffer.ReleaseTemporaryRT(colorGradingLUTId);
     }
 }
