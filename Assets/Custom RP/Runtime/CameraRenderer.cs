@@ -24,6 +24,8 @@ public partial class CameraRenderer
 
     private static int frameBufferId = Shader.PropertyToID("_CameraFrameBuffer");
 
+    private static CameraSettings defaultCameraSettings = new CameraSettings();
+
     //Light
     private Lighting lighting = new Lighting();
     //PostFX
@@ -38,6 +40,10 @@ public partial class CameraRenderer
     {
         this.context = context;
         this.camera = camera;
+
+        var crpCamera = camera.GetComponent<CustomRenderPipelineCamera>();
+        CameraSettings cameraSettings = crpCamera ? crpCamera.Settings : defaultCameraSettings;
+        
         this.useHDR = allowHDR && camera.allowHDR;
 
         PrepareBuffer();
@@ -52,7 +58,8 @@ public partial class CameraRenderer
         buffer.BeginSample(SampleName);
         ExecuteBuffer();
         lighting.Setup(context, cullingResults, shadowSettings, useLightPerObject);//应该在调用CameraRenderer.SetUp之前渲染阴影贴图
-        postFXStack.Setup(context, camera, postFXSettings, useHDR, colorLUTResolution);
+        postFXStack.Setup(context, camera, postFXSettings, useHDR, colorLUTResolution,
+            cameraSettings.finalBlendMode);
         buffer.EndSample(SampleName);
 
         Setup(); //在渲染命令之前设置一些准备信息，例如摄像机的透视信息，摄像机的未知信息等->否则渲染出的SkyBox无法随着视角改变

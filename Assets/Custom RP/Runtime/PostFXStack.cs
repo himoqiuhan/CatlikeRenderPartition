@@ -43,7 +43,9 @@ public partial class PostFXStack
         colorGradingLUTInLogCId = Shader.PropertyToID("_ColorGradingLUTInLogC"),
         fxSourceId = Shader.PropertyToID("_PostFXSource"),
         fxSource2Id = Shader.PropertyToID("_PostFXSource2"),
-        colorGradingLUTId = Shader.PropertyToID("_ColorGradingLUT");
+        colorGradingLUTId = Shader.PropertyToID("_ColorGradingLUT"),
+        finalSrcBlendId = Shader.PropertyToID("_FinalSrcBlend"),
+        finalDstBlendId = Shader.PropertyToID("_FinalDstBlend");
 
     private const int maxBloomPyramidLevels = 16;
 
@@ -65,12 +67,16 @@ public partial class PostFXStack
         Final
     }
 
+    private static Rect fullViewRect = new Rect(0f, 0f, 1f, 1f);
+
     //PostFX是否启用，由是否有PostFXSettings来判断
     public bool IsActive => settings != null;
     //Post FX HDR处理
     private bool useHDR;
     //LUT
     private int colorLUTResolution;
+
+    private CameraSettings.FinalBlendMode finalBlendMode;
 
     public PostFXStack()
     {
@@ -83,8 +89,9 @@ public partial class PostFXStack
     }
     
     public void Setup(ScriptableRenderContext context, Camera camera, PostFXSettings settings, 
-        bool useHDR, int colorLUTResolution)
+        bool useHDR, int colorLUTResolution, CameraSettings.FinalBlendMode finalBlendMode)
     {
+        this.finalBlendMode = finalBlendMode;
         this.colorLUTResolution = colorLUTResolution;
         this.context = context;
         this.camera = camera;
@@ -305,6 +312,29 @@ public partial class PostFXStack
             smh.shadowsStart, smh.shadowsEnd, smh.highlightsStart, smh.highlightsEnd
             ));
     }
+
+    //专门用于渲染最后的Pass，处理Camera的Viewport设置
+    //因为这个函数只会在FinalPass使用，所以部分参数可以使用HardCode
+    void DrawFinal(RenderTargetIdentifier from)
+    {
+        buffer.SetGlobalFloat(finalSrcBlendId, (float)finalBlendMode.source);
+        buffer.SetGlobalFloat(finalDstBlendId, (float)finalBlendMode.destination);
+        buffer.SetGlobalTexture(fxSourceId, from);
+        buffer.SetRenderTarget(
+            BuiltinRenderTextureType.CameraTarget,
+            //camera.rect == fullViewRect ? 
+            //RenderBufferLoadAction.DontCare : RenderBufferLoadAction.Load, //分屏渲染时，部分Tile Based的GPU会在边界出现一些瑕疵；通过加载RT来解决这个问题
+            //RenderBufferLoadAction.Load, //为了实现后处理的Layer Transparent，需要我们在FinalDraw时将Buffer设置为Load
+            //合并关于BlendMode的处理，如果BlendMode设置为One Zero且相机是全屏时，说明这个相机是最底部的，就不需要Load Buffer
+            //Load Buffer的作用是保留当前RT的渲染结果，即保留底部相机的渲染结果
+            finalBlendMode.destination == BlendMode.Zero && camera.rect == fullViewRect ?
+                RenderBufferLoadAction.DontCare : RenderBufferLoadAction.Load,
+            RenderBufferStoreAction.Store);
+        buffer.SetViewport(camera.pixelRect);
+        buffer.DrawProcedural(
+            Matrix4x4.identity, settings.Material,
+            (int)Pass.Final, MeshTopology.Triangles, 3);
+    }
     
     //ColorGrading和ToneMapping放在一起执行
     void DoColorGradingAndToneMapping(int sourceId)
@@ -335,7 +365,8 @@ public partial class PostFXStack
         //重新设置ColorGradingLUTParameters，用于Final Pass处理最终的输出
         buffer.SetGlobalVector(colorGradingLUTParametersId,
             new Vector4(1f / lutWidth, 1f / lutHeight, lutHeight - 1f));
-        Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Final);
+        //Draw(sourceId, BuiltinRenderTextureType.CameraTarget, Pass.Final);
+        DrawFinal(sourceId);
         buffer.ReleaseTemporaryRT(colorGradingLUTId);
     }
 }

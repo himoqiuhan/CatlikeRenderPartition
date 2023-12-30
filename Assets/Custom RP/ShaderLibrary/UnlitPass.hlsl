@@ -42,7 +42,7 @@ half4 BaseFragmentProgram(Varyings i) : SV_Target
     clip(base.a - GetCutOff(config));
     #endif
 
-    return base;
+    return float4(base.rgb, GetFinalAlpha(base.a));
 }
 
 #endif

@@ -143,7 +143,7 @@ half4 LitPassFragmentProgram(Varyings i) : SV_Target0
 #endif
     GI gi = GetGI(GI_FRAGMENT_DATA(i), surface, brdf);
     color.rgb = GetLighting(surface, brdf, gi) + GetEmission(config);
-    color.a = surface.alpha;
+    color.a = GetFinalAlpha(surface.alpha);
 
     return color;
 }

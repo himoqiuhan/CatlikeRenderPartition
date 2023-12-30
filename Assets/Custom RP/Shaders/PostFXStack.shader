@@ -147,6 +147,9 @@ Shader "Hidden/Custom RP/Post FX Stack"
         Pass
         {
             Name "Final"
+            
+            //Blend One OneMinusSrcAlpha //为了实现Bloom的Layer Transparent，将Blend模式换为1 + (1-SrcAlpha)
+            Blend [_FinalSrcBlend] [_FinalDstBlend]
 
             HLSLPROGRAM
             #pragma target 3.5

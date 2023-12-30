@@ -194,9 +194,9 @@ float4 BloomScatterPassFragment(Varyings input) : SV_Target
     {
         lowRes = GetSource(input.screenUV).rgb;
     }
-    float3 highRes = GetSource2(input.screenUV).rgb;
+    float4 highRes = GetSource2(input.screenUV);
     //Scatter是基于BloomIntensity进行逐级混合之间的插值，并不再是简单的相加
-    return float4(lerp(highRes, lowRes, _BloomIntensity), 1.0);
+    return float4(lerp(highRes.rgb, lowRes, _BloomIntensity), highRes.a); //保留High Resolution的Alpha值，用于实现Layer Transparent
 }
 
 float4 BloomScatterFinalPassFragment(Varyings input) : SV_Target
@@ -210,11 +210,11 @@ float4 BloomScatterFinalPassFragment(Varyings input) : SV_Target
     {
         lowRes = GetSource(input.screenUV).rgb;
     }
-    float3 highRes = GetSource2(input.screenUV).rgb;
+    float4 highRes = GetSource2(input.screenUV);
     //在这一套流程中，需要通过原图与混合后的图像的lerp来得到最终的结果，所以需要额外对lowRes的处理
     //此时输入的lowRes只是Bloom区域Scatter的混合结果，非Bloom区域是全黑的，需要将非Bloom区域加入到lowRes中
-    lowRes += highRes - ApplyBloomThreshold(highRes);
-    return float4(lerp(highRes, lowRes, _BloomIntensity), 1.0);
+    lowRes += highRes.rgb - ApplyBloomThreshold(highRes.rgb);
+    return float4(lerp(highRes.rgb, lowRes, _BloomIntensity), highRes.a); //保留High Resolution的Alpha值，用于实现Layer Transparent
 }
 
 //---------------Color Grading---------------
